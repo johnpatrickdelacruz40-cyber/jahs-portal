@@ -13,9 +13,8 @@ export default function EmployeeProfiles({ employees }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [viewDate, setViewDate] = useState(new Date());
   const [attendanceLogs, setAttendanceLogs] = useState({});
-  const [expandedId, setExpandedId] = useState(null); // Added UI State
+  const [expandedId, setExpandedId] = useState(null);
 
-  // --- BUG FIX: Safe Date Navigation ---
   const handlePrevCutoff = () => {
     const d = new Date(viewDate);
     d.setDate(d.getDate() - 15);
@@ -80,17 +79,19 @@ export default function EmployeeProfiles({ employees }) {
             cutoffDays.forEach(d => {
               const dbDate = getDBDateStr(d);
               const isFuture = dbDate > todayDBStr;
-              const status = attendanceLogs[`${emp.id}-${dbDate}`];
+              
+              // If it's a future date, IGNORE it completely from the count
+              if (isFuture) return; 
 
+              const status = attendanceLogs[`${emp.id}-${dbDate}`];
               if (status === 'present') present++;
               else if (status === 'holiday') holiday++;
-              else if (status === 'absent' || (!status && !isFuture)) absent++;
+              else if (status === 'absent' || !status) absent++;
             });
 
             return (
               <div key={emp.id} className="bg-white border border-slate-200 rounded-[2.5rem] shadow-sm overflow-hidden hover:shadow-md transition-shadow">
                  
-                 {/* Clickable Header */}
                  <div 
                    onClick={() => setExpandedId(expandedId === emp.id ? null : emp.id)}
                    className="p-8 flex items-center justify-between cursor-pointer hover:bg-slate-50/50 transition-colors"
@@ -109,11 +110,9 @@ export default function EmployeeProfiles({ employees }) {
                     </div>
                  </div>
 
-                 {/* Collapsible Content */}
                  {expandedId === emp.id && (
                    <div className="p-8 border-t border-slate-100 bg-slate-50/30 animate-in slide-in-from-top-2">
                       <div className="flex flex-col xl:flex-row gap-12">
-                        {/* Summary Badges */}
                         <div className="flex gap-4 xl:w-64">
                            <div className="flex-1 bg-indigo-50 py-4 rounded-2xl text-indigo-600 text-center border border-indigo-100/50">
                               <p className="text-3xl font-black">{present}</p>
@@ -129,17 +128,25 @@ export default function EmployeeProfiles({ employees }) {
                            </div>
                         </div>
                         
-                        {/* Calendar Grid */}
                         <div className="flex-1 grid grid-cols-5 sm:grid-cols-7 lg:grid-cols-10 gap-3">
                            {cutoffDays.map((date, i) => {
                              const dbDate = getDBDateStr(date);
                              const isFuture = dbDate > todayDBStr;
-                             const status = attendanceLogs[`${emp.id}-${dbDate}`];
                              
-                             let bgClass = 'bg-white text-slate-300 border-2 border-slate-100 opacity-60'; // Unmarked / Future
-                             if (status === 'present') bgClass = 'bg-indigo-600 text-white shadow-lg shadow-indigo-100 border-2 border-indigo-600';
-                             if (status === 'holiday') bgClass = 'bg-amber-500 text-white shadow-lg shadow-amber-100 border-2 border-amber-500';
-                             if (status === 'absent' || (!status && !isFuture)) bgClass = 'bg-rose-50 text-rose-500 border-2 border-rose-100'; // Default past unmarked to red
+                             // If it's a future date, IGNORE the database entirely
+                             const status = isFuture ? null : attendanceLogs[`${emp.id}-${dbDate}`];
+                             
+                             let bgClass = ''; 
+                             if (isFuture) {
+                               bgClass = 'bg-white text-slate-300 border-2 border-slate-100 opacity-40';
+                             } else if (status === 'present') {
+                               bgClass = 'bg-indigo-600 text-white shadow-lg shadow-indigo-100 border-2 border-indigo-600';
+                             } else if (status === 'holiday') {
+                               bgClass = 'bg-amber-500 text-white shadow-lg shadow-amber-100 border-2 border-amber-500';
+                             } else { 
+                               // Absent or unmarked past
+                               bgClass = 'bg-rose-50 text-rose-500 border-2 border-rose-100';
+                             }
 
                              return (
                                <div key={i} className={`aspect-square rounded-[1.5rem] flex flex-col items-center justify-center text-[10px] font-black transition-all ${bgClass}`}>

@@ -95,11 +95,12 @@ export default function DailyAttendance({ employees, logHistory }) {
       }
       
       if (typeof logHistory === 'function') logHistory(`Saved attendance for ${empName}`);
-      alert("Attendance Saved Successfully");
+      
+      // Removed the alert() popup for a cleaner UI experience
       await fetchLogs(); 
       
     } catch (error) {
-      alert("Error saving: " + error.message);
+      console.error("Error saving:", error);
     } finally {
       setIsSaving(false);
     }
@@ -120,12 +121,11 @@ export default function DailyAttendance({ employees, logHistory }) {
       else if (!status && !isFuture) totalAbsent++;
     });
 
-    // --- BUG FIX: Use Raw Data for the Toggle Cycle ---
-    const handleToggle = (dbDate, rawStatus) => {
-      let nextStatus = 'present'; // First click defaults to present
-      if (rawStatus === 'present') nextStatus = 'holiday';
-      else if (rawStatus === 'holiday') nextStatus = 'absent';
-      else if (rawStatus === 'absent') nextStatus = null; // Final click clears it completely
+    const handleToggle = (dbDate, currentStatus) => {
+      let nextStatus = 'present'; 
+      if (currentStatus === 'present') nextStatus = 'holiday';
+      else if (currentStatus === 'holiday') nextStatus = 'absent';
+      else if (currentStatus === 'absent') nextStatus = null; 
       
       setAttendanceData(prev => ({...prev, [`${emp.id}-${dbDate}`]: nextStatus}));
     };
@@ -155,7 +155,7 @@ export default function DailyAttendance({ employees, logHistory }) {
         <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-7 xl:grid-cols-8 gap-3">
           {cutoffDays.map((date, i) => {
             const dbDate = getDBDateStr(date);
-            const status = attendanceData[`${emp.id}-${dbDate}`]; // The true data
+            const status = attendanceData[`${emp.id}-${dbDate}`]; 
             const isFuture = dbDate > todayDBStr;
             const isToday = dbDate === todayDBStr;
 
@@ -166,19 +166,16 @@ export default function DailyAttendance({ employees, logHistory }) {
               bgClass = 'bg-white border-slate-200 text-slate-400 hover:border-indigo-200 cursor-pointer'; 
               if (status === 'present') bgClass = 'bg-indigo-600 border-indigo-600 text-white shadow-lg cursor-pointer';
               if (status === 'holiday') bgClass = 'bg-amber-500 border-amber-500 text-white shadow-lg cursor-pointer';
-              // If it is explicitly marked absent OR it is implicitly absent (past and unmarked)
               if (status === 'absent' || (!status && !isFuture)) bgClass = 'bg-rose-50 border-rose-100 text-rose-500 cursor-pointer'; 
             }
 
             return (
               <div 
                 key={i} 
-                // Pass the RAW status to the toggle function, not the display colors
                 onClick={isFuture ? undefined : () => handleToggle(dbDate, status)} 
                 className={`relative p-4 rounded-2xl border-2 flex flex-col items-center justify-center gap-1 transition-all group ${bgClass} ${isToday ? 'ring-4 ring-indigo-500/20 scale-[1.02] z-10' : ''}`}
               >
                 {isToday && <span className="absolute -top-2 bg-rose-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest">Today</span>}
-                
                 {isFuture && <Lock size={12} className="absolute top-3 right-3 opacity-30" />}
 
                 <span className="text-[9px] font-black uppercase tracking-widest opacity-60 mt-1">{date.toLocaleDateString('en-US', { weekday: 'short' })}</span>
