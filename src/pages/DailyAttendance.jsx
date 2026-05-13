@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { Search, ChevronDown, ChevronUp, User, Save, ChevronLeft, ChevronRight } from 'lucide-react';
 
-// Safe date formatter for Supabase (YYYY-MM-DD)
 const getDBDateStr = (dateObj) => {
   const year = dateObj.getFullYear();
   const month = String(dateObj.getMonth() + 1).padStart(2, '0');
@@ -17,36 +16,25 @@ export default function DailyAttendance({ employees, logHistory }) {
   const [isSaving, setIsSaving] = useState(false);
   const [viewDate, setViewDate] = useState(new Date());
 
-  // --- DYNAMIC CUTOFF LOGIC ---
   const getCutoffRange = (baseDate) => {
     const year = baseDate.getFullYear();
     const month = baseDate.getMonth();
     const day = baseDate.getDate();
 
-    if (day >= 11 && day <= 25) {
-      return { label: `${baseDate.toLocaleString('default', { month: 'long' })} 11th - 25th`, start: new Date(year, month, 11), end: new Date(year, month, 25) };
-    }
-    if (day >= 26) {
-      const nextMonth = new Date(year, month + 1, 1);
-      return { label: `${baseDate.toLocaleString('default', { month: 'long' })} 26th - ${nextMonth.toLocaleString('default', { month: 'long' })} 10th`, start: new Date(year, month, 26), end: new Date(year, month + 1, 10) };
-    }
-    const prevMonth = new Date(year, month - 1, 1);
-    return { label: `${prevMonth.toLocaleString('default', { month: 'long' })} 26th - ${baseDate.toLocaleString('default', { month: 'long' })} 10th`, start: new Date(year, month - 1, 26), end: new Date(year, month, 10) };
+    if (day >= 11 && day <= 25) return { label: `${baseDate.toLocaleString('default', { month: 'long' })} 11th - 25th`, start: new Date(year, month, 11), end: new Date(year, month, 25) };
+    if (day >= 26) return { label: `${baseDate.toLocaleString('default', { month: 'long' })} 26th - ${new Date(year, month + 1, 1).toLocaleString('default', { month: 'long' })} 10th`, start: new Date(year, month, 26), end: new Date(year, month + 1, 10) };
+    return { label: `${new Date(year, month - 1, 1).toLocaleString('default', { month: 'long' })} 26th - ${baseDate.toLocaleString('default', { month: 'long' })} 10th`, start: new Date(year, month - 1, 26), end: new Date(year, month, 10) };
   };
 
   const currentCutoff = getCutoffRange(viewDate);
   
-  // Generate Days (Excluding Sundays)
   const cutoffDays = [];
   let dayTracker = new Date(currentCutoff.start);
   while (dayTracker <= currentCutoff.end) {
-    if (dayTracker.getDay() !== 0) { // 0 is Sunday
-      cutoffDays.push(new Date(dayTracker));
-    }
+    if (dayTracker.getDay() !== 0) cutoffDays.push(new Date(dayTracker)); // Skip Sundays
     dayTracker.setDate(dayTracker.getDate() + 1);
   }
 
-  // --- DATABASE: Fetch & Save ---
   const fetchLogs = async () => {
     const { data } = await supabase.from('attendance_logs').select('*');
     const mapped = {};
@@ -58,20 +46,29 @@ export default function DailyAttendance({ employees, logHistory }) {
 
   const handleSave = async (empId, empName) => {
     setIsSaving(true);
+    const todayDBStr = getDBDateStr(new Date());
     
-    // We send ALL days in the cutoff to the database. Unmarked days become 'absent'.
-    const logsToUpload = cutoffDays.map(date => {
+    // Only save data if it's explicitly marked OR if it's a past/present day (default to absent)
+    const logsToUpload = cutoffDays.reduce((acc, date) => {
       const dbDate = getDBDateStr(date);
-      const status = attendanceData[`${empId}-${dbDate}`] || 'absent';
-      return { employee_id: empId, log_date: dbDate, status };
-    });
+      const isFuture = dbDate > todayDBStr;
+      let status = attendanceData[`${empId}-${dbDate}`];
+
+      // If it's unmarked and NOT in the future, it defaults to absent
+      if (!status && !isFuture) status = 'absent';
+
+      // If there's a status (not null from future unmarks), queue it for save
+      if (status) acc.push({ employee_id: empId, log_date: dbDate, status });
+      
+      return acc;
+    }, []);
 
     const { error } = await supabase.from('attendance_logs').upsert(logsToUpload, { onConflict: 'employee_id, log_date' });
     
     if (!error) {
       if (typeof logHistory === 'function') logHistory(`Saved attendance for ${empName}`);
       alert("Attendance Saved Successfully");
-      await fetchLogs(); // Refresh local state to ensure sync
+      await fetchLogs(); 
     } else {
       alert("Error saving: " + error.message);
     }
@@ -79,16 +76,26 @@ export default function DailyAttendance({ employees, logHistory }) {
   };
 
   const CutoffCalendar = ({ emp }) => {
-    const empLogs = cutoffDays.map(d => attendanceData[`${emp.id}-${getDBDateStr(d)}`] || 'absent');
-    const totalPresent = empLogs.filter(s => s === 'present').length;
-    const totalHoliday = empLogs.filter(s => s === 'holiday').length;
-    const totalAbsent = empLogs.filter(s => s === 'absent').length;
+    const todayDBStr = getDBDateStr(new Date());
+    let totalPresent = 0, totalHoliday = 0, totalAbsent = 0;
 
-    // Toggle logic: Absent -> Present -> Holiday -> Absent
+    // Accurate Counting Logic
+    cutoffDays.forEach(d => {
+      const dbDate = getDBDateStr(d);
+      const isFuture = dbDate > todayDBStr;
+      const status = attendanceData[`${emp.id}-${dbDate}`];
+
+      if (status === 'present') totalPresent++;
+      else if (status === 'holiday') totalHoliday++;
+      else if (status === 'absent') totalAbsent++;
+      else if (!status && !isFuture) totalAbsent++; // Count unmarked past days as absent
+    });
+
     const handleToggle = (dbDate, currentStatus) => {
       let nextStatus = 'present';
       if (currentStatus === 'present') nextStatus = 'holiday';
-      if (currentStatus === 'holiday') nextStatus = 'absent';
+      else if (currentStatus === 'holiday') nextStatus = 'absent';
+      else if (currentStatus === 'absent') nextStatus = null; // Clears the mark entirely
       
       setAttendanceData(prev => ({...prev, [`${emp.id}-${dbDate}`]: nextStatus}));
     };
@@ -97,11 +104,11 @@ export default function DailyAttendance({ employees, logHistory }) {
       <div className="bg-slate-50 p-10 border-t border-slate-100 animate-in slide-in-from-top-2">
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-8">
           <div className="flex gap-4">
-             <div className="bg-indigo-600 px-6 py-3 rounded-2xl text-white shadow-lg shadow-indigo-100 w-32">
+             <div className="bg-indigo-600 px-6 py-3 rounded-2xl text-white shadow-lg w-32">
                <p className="text-[10px] font-black uppercase opacity-60">Present</p>
                <p className="text-2xl font-black">{totalPresent}</p>
              </div>
-             <div className="bg-amber-500 px-6 py-3 rounded-2xl text-white shadow-lg shadow-amber-100 w-32">
+             <div className="bg-amber-500 px-6 py-3 rounded-2xl text-white shadow-lg w-32">
                <p className="text-[10px] font-black uppercase opacity-60">Holiday</p>
                <p className="text-2xl font-black">{totalHoliday}</p>
              </div>
@@ -110,29 +117,25 @@ export default function DailyAttendance({ employees, logHistory }) {
                <p className="text-2xl font-black text-slate-900">{totalAbsent}</p>
              </div>
           </div>
-          <button onClick={() => handleSave(emp.id, emp.name)} disabled={isSaving} className="w-full lg:w-auto flex items-center justify-center gap-2 px-8 py-4 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-700 hover:scale-105 active:scale-95 transition-all shadow-xl shadow-emerald-100 disabled:opacity-50">
+          <button onClick={() => handleSave(emp.id, emp.name)} disabled={isSaving} className="w-full lg:w-auto flex items-center justify-center gap-2 px-8 py-4 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-xl disabled:opacity-50">
             {isSaving ? "Saving..." : <><Save size={16}/> Done / Update Record</>}
           </button>
-        </div>
-
-        <div className="flex justify-end gap-4 mb-4 text-[10px] font-black uppercase">
-          <span className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-indigo-600"></div> Present</span>
-          <span className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-amber-500"></div> Holiday</span>
-          <span className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-white border border-slate-300"></div> Unmarked (Absent)</span>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-7 xl:grid-cols-8 gap-3">
           {cutoffDays.map((date, i) => {
             const dbDate = getDBDateStr(date);
-            const status = attendanceData[`${emp.id}-${dbDate}`] || 'absent';
-            const isToday = dbDate === getDBDateStr(new Date());
+            const status = attendanceData[`${emp.id}-${dbDate}`];
+            const isFuture = dbDate > todayDBStr;
+            const isToday = dbDate === todayDBStr;
 
-            let bgClass = 'bg-white border-slate-200 text-slate-400 hover:border-indigo-200'; // Absent/Unmarked
-            if (status === 'present') bgClass = 'bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-100';
-            if (status === 'holiday') bgClass = 'bg-amber-500 border-amber-500 text-white shadow-lg shadow-amber-100';
+            let bgClass = 'bg-white border-slate-200 text-slate-400 hover:border-indigo-200'; // Unmarked
+            if (status === 'present') bgClass = 'bg-indigo-600 border-indigo-600 text-white shadow-lg';
+            if (status === 'holiday') bgClass = 'bg-amber-500 border-amber-500 text-white shadow-lg';
+            if (status === 'absent' || (!status && !isFuture)) bgClass = 'bg-rose-50 border-rose-100 text-rose-500'; // Explicit or defaulted absent
 
             return (
-              <div key={i} onClick={() => handleToggle(dbDate, status)} className={`relative p-4 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all cursor-pointer group ${bgClass} ${isToday ? 'ring-4 ring-indigo-500/20 scale-[1.02] z-10' : ''}`}>
+              <div key={i} onClick={() => handleToggle(dbDate, status || (!isFuture ? 'absent' : null))} className={`relative p-4 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all cursor-pointer group ${bgClass} ${isToday ? 'ring-4 ring-indigo-500/20 scale-[1.02] z-10' : ''}`}>
                 {isToday && <span className="absolute -top-2 bg-rose-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest">Today</span>}
                 <span className="text-[9px] font-black uppercase tracking-widest opacity-60">{date.toLocaleDateString('en-US', { weekday: 'short' })}</span>
                 <span className="text-2xl font-black">{date.getDate()}</span>
@@ -147,7 +150,6 @@ export default function DailyAttendance({ employees, logHistory }) {
 
   return (
     <div className="space-y-8">
-      {/* ... (Header and Search bars remain exactly the same) ... */}
       <div className="flex flex-col md:flex-row justify-between items-end gap-6">
         <div>
           <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase">Attendance Manager</h1>

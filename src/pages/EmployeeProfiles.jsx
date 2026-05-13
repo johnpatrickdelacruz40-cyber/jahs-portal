@@ -21,7 +21,6 @@ export default function EmployeeProfiles({ employees }) {
     setAttendanceLogs(mapped);
   };
 
-  // Run fetch whenever the view date changes so it pulls fresh data
   useEffect(() => { fetchLogs(); }, [viewDate]);
 
   const getCutoffRange = (baseDate) => {
@@ -61,9 +60,17 @@ export default function EmployeeProfiles({ employees }) {
 
        <div className="grid grid-cols-1 gap-6">
           {employees.filter(e => e.name.toLowerCase().includes(searchTerm.toLowerCase())).map(emp => {
-            const empLogs = cutoffDays.map(d => attendanceLogs[`${emp.id}-${getDBDateStr(d)}`] || 'absent');
-            const present = empLogs.filter(s => s === 'present').length;
-            const absent = empLogs.filter(s => s === 'absent').length;
+            const todayDBStr = getDBDateStr(new Date());
+            let present = 0, absent = 0;
+
+            cutoffDays.forEach(d => {
+              const dbDate = getDBDateStr(d);
+              const isFuture = dbDate > todayDBStr;
+              const status = attendanceLogs[`${emp.id}-${dbDate}`];
+
+              if (status === 'present') present++;
+              else if (status === 'absent' || (!status && !isFuture)) absent++;
+            });
 
             return (
               <div key={emp.id} className="bg-white border border-slate-200 rounded-[3.5rem] p-10 shadow-sm flex flex-col xl:flex-row gap-12 hover:shadow-md transition-shadow">
@@ -79,7 +86,7 @@ export default function EmployeeProfiles({ employees }) {
                           <p className="text-2xl font-black">{present}</p>
                           <p className="text-[8px] font-black uppercase tracking-widest">Present</p>
                        </div>
-                       <div className="flex-1 bg-slate-50 py-3 rounded-2xl text-slate-400">
+                       <div className="flex-1 bg-rose-50 py-3 rounded-2xl text-rose-500">
                           <p className="text-2xl font-black">{absent}</p>
                           <p className="text-[8px] font-black uppercase tracking-widest">Absent</p>
                        </div>
@@ -88,11 +95,14 @@ export default function EmployeeProfiles({ employees }) {
                  
                  <div className="flex-1 grid grid-cols-5 sm:grid-cols-7 lg:grid-cols-10 gap-3">
                     {cutoffDays.map((date, i) => {
-                      const status = attendanceLogs[`${emp.id}-${getDBDateStr(date)}`] || 'absent';
+                      const dbDate = getDBDateStr(date);
+                      const isFuture = dbDate > todayDBStr;
+                      const status = attendanceLogs[`${emp.id}-${dbDate}`];
                       
-                      let bgClass = 'bg-slate-50 text-slate-300 border border-slate-100 opacity-60';
+                      let bgClass = 'bg-slate-50 text-slate-300 border border-slate-100 opacity-60'; // Unmarked / Future
                       if (status === 'present') bgClass = 'bg-indigo-600 text-white shadow-lg shadow-indigo-100';
                       if (status === 'holiday') bgClass = 'bg-amber-500 text-white shadow-lg shadow-amber-100';
+                      if (status === 'absent' || (!status && !isFuture)) bgClass = 'bg-rose-50 text-rose-500 border border-rose-100'; // Default past unmarked to red
 
                       return (
                         <div key={i} className={`aspect-square rounded-[1.5rem] flex flex-col items-center justify-center text-[10px] font-black transition-all ${bgClass}`}>
