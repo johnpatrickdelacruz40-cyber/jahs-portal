@@ -43,7 +43,6 @@ export default function EmployeeProfiles({ employees }) {
 
   return (
     <div>
-      {/* SCREEN UI */}
       <div className="space-y-8 animate-in fade-in duration-700 print:hidden">
          <div className="flex flex-col md:flex-row justify-between items-end gap-6">
            <div className="space-y-2">
@@ -74,7 +73,6 @@ export default function EmployeeProfiles({ employees }) {
 
               return (
                 <div key={emp.id} className="bg-white border border-slate-200 rounded-[2.5rem] shadow-sm overflow-hidden hover:shadow-md transition-shadow">
-                   
                    <div onClick={() => setExpandedId(expandedId === emp.id ? null : emp.id)} className="p-8 flex items-center justify-between cursor-pointer hover:bg-slate-50/50 transition-colors">
                       <div className="flex items-center gap-6">
                          <div className="w-20 h-20 rounded-[1.5rem] border-4 border-slate-50 shadow-sm overflow-hidden bg-white p-1">
@@ -94,7 +92,7 @@ export default function EmployeeProfiles({ employees }) {
                      <div className="p-8 border-t border-slate-100 bg-slate-50/30 animate-in slide-in-from-top-2">
                         <div className="flex justify-end mb-6">
                           <button onClick={() => window.print()} className="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 transition-all shadow-md">
-                            <Printer size={16}/> Print Record
+                            <Printer size={16}/> Print Calendar Record
                           </button>
                         </div>
                         <div className="flex flex-col xl:flex-row gap-12">
@@ -136,7 +134,7 @@ export default function EmployeeProfiles({ employees }) {
          </div>
       </div>
 
-      {/* --- PRINT ONLY VIEW FOR INDIVIDUAL --- */}
+      {/* --- PRINT ONLY VIEW: CALENDAR GRID --- */}
       <div className="hidden print:block text-black bg-white p-8">
         {employees.filter(e => e.id === expandedId).map(emp => {
             const todayDBStr = getDBDateStr(new Date());
@@ -151,27 +149,28 @@ export default function EmployeeProfiles({ employees }) {
             return (
               <div key={`print-${emp.id}`}>
                 <div className="flex items-center gap-6 mb-8 border-b-2 border-black pb-6">
-                   <div className="w-24 h-24 rounded-xl border border-black overflow-hidden bg-white p-1">
+                   <div className="w-24 h-24 rounded-xl border-2 border-black overflow-hidden bg-white p-1">
                       {emp.photo ? <img src={emp.photo} className="w-full h-full object-cover grayscale" /> : <User className="m-auto h-full text-black" size={40} />}
                    </div>
                    <div>
-                      <h2 className="text-2xl font-black uppercase tracking-widest text-gray-500 mb-1">Individual Daily Time Record</h2>
+                      <h2 className="text-2xl font-black uppercase tracking-widest text-gray-500 mb-1">Individual Calendar Record</h2>
                       <h3 className="text-4xl font-black uppercase leading-none">{emp.name}</h3>
                       <p className="text-lg font-mono font-bold mt-2">ID: {emp.idNo} | {currentCutoff.label}</p>
                    </div>
                 </div>
 
-                <div className="flex gap-10 mb-8 border border-black p-4 bg-gray-100">
+                <div className="flex gap-10 mb-8 border-2 border-black p-4 bg-gray-100">
                   <p className="text-lg font-bold uppercase"><span className="text-sm font-normal text-gray-600 block">Total Present</span> {p} Days</p>
                   <p className="text-lg font-bold uppercase"><span className="text-sm font-normal text-gray-600 block">Total Absent</span> {a} Days</p>
                   <p className="text-lg font-bold uppercase"><span className="text-sm font-normal text-gray-600 block">Total Holiday</span> {h} Days</p>
                 </div>
 
-                <h4 className="text-sm font-black uppercase tracking-widest mb-4 border-b border-gray-300 pb-2">Detailed Log</h4>
-                <div className="grid grid-cols-4 gap-4">
+                <h4 className="text-sm font-black uppercase tracking-widest mb-4">Calendar Grid</h4>
+                {/* Visual Box Calendar for Print */}
+                <div className="grid grid-cols-5 gap-4">
                   {cutoffDays.map((date, i) => {
                     const dbDate = getDBDateStr(date);
-                    if (dbDate > todayDBStr) return null; // Don't print future dates
+                    if (dbDate > todayDBStr) return null; // Hide future dates
                     
                     const status = attendanceLogs[`${emp.id}-${dbDate}`];
                     let text = "ABSENT";
@@ -179,9 +178,10 @@ export default function EmployeeProfiles({ employees }) {
                     if (status === 'holiday') text = "HOLIDAY";
 
                     return (
-                      <div key={i} className="flex justify-between border-b border-dotted border-gray-400 py-1 text-sm font-mono">
-                        <span>{date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}:</span>
-                        <span className="font-bold">{text}</span>
+                      <div key={i} className="border-2 border-black flex flex-col items-center justify-center p-4">
+                        <span className="text-[10px] font-bold uppercase tracking-widest mb-1">{date.toLocaleDateString('en-US', { weekday: 'short', month: 'short' })}</span>
+                        <span className="text-4xl font-black mb-1">{date.getDate()}</span>
+                        <span className="text-sm font-bold uppercase border-t-2 border-black w-full text-center pt-2">{text}</span>
                       </div>
                     );
                   })}
