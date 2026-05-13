@@ -29,9 +29,12 @@ export default function App() {
 
   useEffect(() => { fetchEmployees(); }, []);
 
-  // Central Audit Logger (Prevents "n is not a function" error)
+  // Central Audit Logger
   const logAction = (detail) => {
-    const timestamp = new Date().toLocaleString();
+    const timestamp = new Date().toLocaleString('en-US', { 
+      month: 'short', day: 'numeric', year: 'numeric', 
+      hour: 'numeric', minute: '2-digit', hour12: true 
+    });
     setHistoryLogs(prev => [{ time: timestamp, detail }, ...prev]);
   };
 
@@ -68,6 +71,11 @@ export default function App() {
                   <p className="font-bold text-slate-700">{log.detail}</p>
                 </div>
               ))}
+              {historyLogs.length === 0 && (
+                <div className="text-center py-10 text-slate-400 font-bold uppercase text-sm tracking-widest">
+                  No actions recorded in this session.
+                </div>
+              )}
             </div>
           </div>
         );
@@ -78,20 +86,30 @@ export default function App() {
   };
 
   return (
-    <div className="flex h-screen bg-[#F8FAFC] font-sans text-slate-900 overflow-hidden select-none">
-      <Sidebar 
-        isOpen={isSidebarOpen} 
-        setIsOpen={setIsSidebarOpen} 
-        activeTab={currentView} 
-        setActiveTab={setCurrentView} 
-        isAdmin={isAdmin} 
-        setIsAdmin={setIsAdmin} 
-      />
+    // The 'print:' prefix tells Tailwind how to behave when Ctrl+P is pressed
+    <div className="flex h-screen print:h-auto print:bg-white bg-[#F8FAFC] font-sans text-slate-900 overflow-hidden print:overflow-visible select-none print:select-auto">
       
-      <div className="flex-1 flex flex-col overflow-hidden w-full relative">
-        <Topbar onMenuClick={() => setIsSidebarOpen(true)} isAdmin={isAdmin} />
-        <main className="flex-1 overflow-y-auto p-4 md:p-10">
-          <div className="max-w-7xl mx-auto h-full">
+      {/* Hide Sidebar when printing */}
+      <div className="print:hidden">
+        <Sidebar 
+          isOpen={isSidebarOpen} 
+          setIsOpen={setIsSidebarOpen} 
+          activeTab={currentView} 
+          setActiveTab={setCurrentView} 
+          isAdmin={isAdmin} 
+          setIsAdmin={setIsAdmin} 
+        />
+      </div>
+      
+      <div className="flex-1 flex flex-col overflow-hidden print:overflow-visible w-full relative">
+        {/* Hide Topbar when printing */}
+        <div className="print:hidden">
+          <Topbar onMenuClick={() => setIsSidebarOpen(true)} isAdmin={isAdmin} />
+        </div>
+        
+        {/* Unlock scrollbars so paper can extend beyond the screen size */}
+        <main className="flex-1 overflow-y-auto print:overflow-visible p-4 md:p-10 print:p-0">
+          <div className="max-w-7xl mx-auto h-full print:max-w-none">
             {renderContent()}
           </div>
         </main>
