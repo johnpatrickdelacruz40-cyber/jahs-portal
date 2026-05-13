@@ -39,7 +39,7 @@ export default function App() {
   };
 
   const renderContent = () => {
-    // Admin Guard logic
+    // Admin Guard logic: Requires login for specific sensitive tabs
     if (currentView === 'Manage Employees' || currentView === 'Daily Attendance' || currentView === 'Audit History') {
       if (!isAdmin) return <AdminLogin onLogin={() => { setIsAdmin(true); logAction('Admin Session Started'); }} />;
     }
@@ -86,11 +86,11 @@ export default function App() {
   };
 
   return (
-    // The 'print:' prefix tells Tailwind how to behave when Ctrl+P is pressed
+    // 'print:' prefixes allow the page to flow naturally onto paper when Ctrl+P is pressed
     <div className="flex h-screen print:h-auto print:bg-white bg-[#F8FAFC] font-sans text-slate-900 overflow-hidden print:overflow-visible select-none print:select-auto">
       
-      {/* Hide Sidebar when printing */}
-      <div className="print:hidden">
+      {/* Hide Sidebar when printing, ensure 'h-full' so it stretches to the bottom */}
+      <div className="print:hidden h-full">
         <Sidebar 
           isOpen={isSidebarOpen} 
           setIsOpen={setIsSidebarOpen} 
