@@ -1,17 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { 
-  Search, ChevronDown, ChevronUp, User, 
-  CheckCircle2, Circle, Save, ChevronLeft, ChevronRight 
-} from 'lucide-react';
+import { Search, ChevronDown, ChevronUp, User, Save, ChevronLeft, ChevronRight } from 'lucide-react';
+
+// Safe date formatter for Supabase (YYYY-MM-DD)
+const getDBDateStr = (dateObj) => {
+  const year = dateObj.getFullYear();
+  const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const day = String(dateObj.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 export default function DailyAttendance({ employees, logHistory }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedId, setExpandedId] = useState(null);
   const [attendanceData, setAttendanceData] = useState({});
   const [isSaving, setIsSaving] = useState(false);
-  
-  // Navigation State: Start with current date
   const [viewDate, setViewDate] = useState(new Date());
 
   // --- DYNAMIC CUTOFF LOGIC ---
@@ -21,33 +24,25 @@ export default function DailyAttendance({ employees, logHistory }) {
     const day = baseDate.getDate();
 
     if (day >= 11 && day <= 25) {
-      return { 
-        label: `${baseDate.toLocaleString('default', { month: 'long' })} 11th - 25th`, 
-        start: new Date(year, month, 11), 
-        end: new Date(year, month, 25) 
-      };
+      return { label: `${baseDate.toLocaleString('default', { month: 'long' })} 11th - 25th`, start: new Date(year, month, 11), end: new Date(year, month, 25) };
     }
     if (day >= 26) {
       const nextMonth = new Date(year, month + 1, 1);
-      return { 
-        label: `${baseDate.toLocaleString('default', { month: 'long' })} 26th - ${nextMonth.toLocaleString('default', { month: 'long' })} 10th`, 
-        start: new Date(year, month, 26), 
-        end: new Date(year, month + 1, 10) 
-      };
+      return { label: `${baseDate.toLocaleString('default', { month: 'long' })} 26th - ${nextMonth.toLocaleString('default', { month: 'long' })} 10th`, start: new Date(year, month, 26), end: new Date(year, month + 1, 10) };
     }
     const prevMonth = new Date(year, month - 1, 1);
-    return { 
-      label: `${prevMonth.toLocaleString('default', { month: 'long' })} 26th - ${baseDate.toLocaleString('default', { month: 'long' })} 10th`, 
-      start: new Date(year, month - 1, 26), 
-      end: new Date(year, month, 10) 
-    };
+    return { label: `${prevMonth.toLocaleString('default', { month: 'long' })} 26th - ${baseDate.toLocaleString('default', { month: 'long' })} 10th`, start: new Date(year, month - 1, 26), end: new Date(year, month, 10) };
   };
 
   const currentCutoff = getCutoffRange(viewDate);
+  
+  // Generate Days (Excluding Sundays)
   const cutoffDays = [];
   let dayTracker = new Date(currentCutoff.start);
   while (dayTracker <= currentCutoff.end) {
-    cutoffDays.push(new Date(dayTracker));
+    if (dayTracker.getDay() !== 0) { // 0 is Sunday
+      cutoffDays.push(new Date(dayTracker));
+    }
     dayTracker.setDate(dayTracker.getDate() + 1);
   }
 
@@ -59,66 +54,89 @@ export default function DailyAttendance({ employees, logHistory }) {
     setAttendanceData(mapped);
   };
 
-  useEffect(() => { fetchLogs(); }, []);
+  useEffect(() => { fetchLogs(); }, [viewDate]);
 
   const handleSave = async (empId, empName) => {
     setIsSaving(true);
-    const logsToUpload = Object.entries(attendanceData)
-      .filter(([key]) => key.startsWith(`${empId}-`))
-      .map(([key, status]) => ({
-        employee_id: empId,
-        log_date: key.split('-').slice(1).join('-'),
-        status
-      }));
+    
+    // We send ALL days in the cutoff to the database. Unmarked days become 'absent'.
+    const logsToUpload = cutoffDays.map(date => {
+      const dbDate = getDBDateStr(date);
+      const status = attendanceData[`${empId}-${dbDate}`] || 'absent';
+      return { employee_id: empId, log_date: dbDate, status };
+    });
 
-    const { error } = await supabase.from('attendance_logs').upsert(logsToUpload);
+    const { error } = await supabase.from('attendance_logs').upsert(logsToUpload, { onConflict: 'employee_id, log_date' });
     
     if (!error) {
-      if (typeof logHistory === 'function') logHistory(`Updated attendance for ${empName}`);
+      if (typeof logHistory === 'function') logHistory(`Saved attendance for ${empName}`);
       alert("Attendance Saved Successfully");
+      await fetchLogs(); // Refresh local state to ensure sync
+    } else {
+      alert("Error saving: " + error.message);
     }
     setIsSaving(false);
   };
 
   const CutoffCalendar = ({ emp }) => {
-    const empLogs = cutoffDays.map(d => attendanceData[`${emp.id}-${d.toDateString()}`]);
+    const empLogs = cutoffDays.map(d => attendanceData[`${emp.id}-${getDBDateStr(d)}`] || 'absent');
     const totalPresent = empLogs.filter(s => s === 'present').length;
+    const totalHoliday = empLogs.filter(s => s === 'holiday').length;
     const totalAbsent = empLogs.filter(s => s === 'absent').length;
+
+    // Toggle logic: Absent -> Present -> Holiday -> Absent
+    const handleToggle = (dbDate, currentStatus) => {
+      let nextStatus = 'present';
+      if (currentStatus === 'present') nextStatus = 'holiday';
+      if (currentStatus === 'holiday') nextStatus = 'absent';
+      
+      setAttendanceData(prev => ({...prev, [`${emp.id}-${dbDate}`]: nextStatus}));
+    };
 
     return (
       <div className="bg-slate-50 p-10 border-t border-slate-100 animate-in slide-in-from-top-2">
-        <div className="flex justify-between items-center mb-8">
-          <div className="flex gap-8">
-             <div className="bg-indigo-600 px-6 py-3 rounded-2xl text-white shadow-lg">
-               <p className="text-[10px] font-black uppercase opacity-60">Total Presents</p>
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-8">
+          <div className="flex gap-4">
+             <div className="bg-indigo-600 px-6 py-3 rounded-2xl text-white shadow-lg shadow-indigo-100 w-32">
+               <p className="text-[10px] font-black uppercase opacity-60">Present</p>
                <p className="text-2xl font-black">{totalPresent}</p>
              </div>
-             <div className="bg-white px-6 py-3 rounded-2xl border border-slate-200">
-               <p className="text-[10px] font-black text-slate-400 uppercase">Total Absents</p>
+             <div className="bg-amber-500 px-6 py-3 rounded-2xl text-white shadow-lg shadow-amber-100 w-32">
+               <p className="text-[10px] font-black uppercase opacity-60">Holiday</p>
+               <p className="text-2xl font-black">{totalHoliday}</p>
+             </div>
+             <div className="bg-white px-6 py-3 rounded-2xl border border-slate-200 w-32">
+               <p className="text-[10px] font-black text-slate-400 uppercase">Absent</p>
                <p className="text-2xl font-black text-slate-900">{totalAbsent}</p>
              </div>
           </div>
-          <button 
-            onClick={() => handleSave(emp.id, emp.name)}
-            disabled={isSaving}
-            className="flex items-center gap-2 px-8 py-4 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-100 disabled:opacity-50"
-          >
+          <button onClick={() => handleSave(emp.id, emp.name)} disabled={isSaving} className="w-full lg:w-auto flex items-center justify-center gap-2 px-8 py-4 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-700 hover:scale-105 active:scale-95 transition-all shadow-xl shadow-emerald-100 disabled:opacity-50">
             {isSaving ? "Saving..." : <><Save size={16}/> Done / Update Record</>}
           </button>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+        <div className="flex justify-end gap-4 mb-4 text-[10px] font-black uppercase">
+          <span className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-indigo-600"></div> Present</span>
+          <span className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-amber-500"></div> Holiday</span>
+          <span className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-white border border-slate-300"></div> Unmarked (Absent)</span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-7 xl:grid-cols-8 gap-3">
           {cutoffDays.map((date, i) => {
-            const dStr = date.toDateString();
-            const status = attendanceData[`${emp.id}-${dStr}`];
+            const dbDate = getDBDateStr(date);
+            const status = attendanceData[`${emp.id}-${dbDate}`] || 'absent';
+            const isToday = dbDate === getDBDateStr(new Date());
+
+            let bgClass = 'bg-white border-slate-200 text-slate-400 hover:border-indigo-200'; // Absent/Unmarked
+            if (status === 'present') bgClass = 'bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-100';
+            if (status === 'holiday') bgClass = 'bg-amber-500 border-amber-500 text-white shadow-lg shadow-amber-100';
+
             return (
-              <div key={i} className={`p-4 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all cursor-pointer
-                ${status === 'present' ? 'bg-indigo-600 border-indigo-600 text-white' : status === 'absent' ? 'bg-rose-500 border-rose-500 text-white' : 'bg-white border-slate-100'}`}
-                onClick={() => setAttendanceData(prev => ({...prev, [`${emp.id}-${dStr}`]: status === 'present' ? 'absent' : 'present'}))}
-              >
-                <span className="text-[9px] font-black uppercase opacity-60">{date.toLocaleDateString('en-US', { weekday: 'short' })}</span>
-                <span className="text-xl font-black">{date.getDate()}</span>
-                <span className="text-[9px] font-bold">{date.toLocaleString('default', { month: 'short' })}</span>
+              <div key={i} onClick={() => handleToggle(dbDate, status)} className={`relative p-4 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all cursor-pointer group ${bgClass} ${isToday ? 'ring-4 ring-indigo-500/20 scale-[1.02] z-10' : ''}`}>
+                {isToday && <span className="absolute -top-2 bg-rose-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest">Today</span>}
+                <span className="text-[9px] font-black uppercase tracking-widest opacity-60">{date.toLocaleDateString('en-US', { weekday: 'short' })}</span>
+                <span className="text-2xl font-black">{date.getDate()}</span>
+                <span className="text-[9px] font-bold opacity-80 uppercase">{date.toLocaleString('default', { month: 'short' })}</span>
               </div>
             );
           })}
@@ -129,9 +147,10 @@ export default function DailyAttendance({ employees, logHistory }) {
 
   return (
     <div className="space-y-8">
+      {/* ... (Header and Search bars remain exactly the same) ... */}
       <div className="flex flex-col md:flex-row justify-between items-end gap-6">
         <div>
-          <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase">Attendance Manager</h1>
+          <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase">Attendance Manager</h1>
           <div className="flex items-center gap-4 mt-2">
             <button onClick={() => setViewDate(new Date(viewDate.setDate(viewDate.getDate() - 15)))} className="p-2 hover:bg-slate-100 rounded-lg"><ChevronLeft size={20}/></button>
             <p className="font-bold text-indigo-600 uppercase text-xs tracking-widest bg-indigo-50 px-4 py-2 rounded-full">{currentCutoff.label}</p>
@@ -144,23 +163,23 @@ export default function DailyAttendance({ employees, logHistory }) {
         </div>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-[3rem] shadow-sm overflow-hidden">
+      <div className="bg-white border border-slate-200 rounded-[3.5rem] shadow-sm overflow-hidden">
         <table className="w-full text-left">
           <tbody className="divide-y divide-slate-50">
             {employees.filter(e => e.name.toLowerCase().includes(searchTerm.toLowerCase())).map((emp) => (
               <React.Fragment key={emp.id}>
-                <tr className={`cursor-pointer group ${expandedId === emp.id ? 'bg-indigo-50/30' : 'hover:bg-slate-50/50'}`} onClick={() => setExpandedId(expandedId === emp.id ? null : emp.id)}>
+                <tr className={`cursor-pointer group transition-colors ${expandedId === emp.id ? 'bg-indigo-50/40' : 'hover:bg-slate-50/50'}`} onClick={() => setExpandedId(expandedId === emp.id ? null : emp.id)}>
                   <td className="px-12 py-6 flex items-center gap-6">
-                    <div className="w-14 h-14 rounded-2xl border bg-white overflow-hidden p-1">
-                      {emp.photo ? <img src={emp.photo} className="w-full h-full object-cover rounded-xl" alt="" /> : <User className="text-slate-200 m-auto" />}
+                    <div className="w-16 h-16 rounded-[1.5rem] border-2 bg-white overflow-hidden p-1 shadow-sm">
+                      {emp.photo ? <img src={emp.photo} className="w-full h-full object-cover rounded-xl" alt="" /> : <User className="text-slate-200 m-auto" size={32} />}
                     </div>
                     <div>
-                      <p className="font-black text-slate-900 text-lg">{emp.name}</p>
-                      <p className="text-[10px] text-slate-400 font-bold uppercase">{emp.idNo}</p>
+                      <p className="font-black text-slate-900 text-xl tracking-tight leading-tight">{emp.name}</p>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">{emp.idNo}</p>
                     </div>
                   </td>
                   <td className="px-12 py-6 text-right">
-                    <div className={`inline-flex items-center justify-center w-10 h-10 rounded-xl ${expandedId === emp.id ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-400'}`}>
+                    <div className={`inline-flex items-center justify-center w-12 h-12 rounded-2xl transition-all ${expandedId === emp.id ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-50 text-slate-400'}`}>
                       {expandedId === emp.id ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                     </div>
                   </td>
