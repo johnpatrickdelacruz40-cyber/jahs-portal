@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { Search, ChevronLeft, ChevronRight, User, ChevronDown, ChevronUp, Printer } from 'lucide-react';
+import { Search, ChevronDown, ChevronUp, User, Save, ChevronLeft, ChevronRight, Lock, Printer } from 'lucide-react';
 
 const getDBDateStr = (dateObj) => {
   const year = dateObj.getFullYear();
@@ -9,11 +9,12 @@ const getDBDateStr = (dateObj) => {
   return `${year}-${month}-${day}`;
 };
 
-export default function EmployeeProfiles({ employees }) {
+export default function DailyAttendance({ employees, logHistory }) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [viewDate, setViewDate] = useState(new Date());
-  const [attendanceLogs, setAttendanceLogs] = useState({});
   const [expandedId, setExpandedId] = useState(null);
+  const [attendanceData, setAttendanceData] = useState({});
+  const [isSaving, setIsSaving] = useState(false);
+  const [viewDate, setViewDate] = useState(new Date());
 
   const handlePrevCutoff = () => { const d = new Date(viewDate); d.setDate(d.getDate() - 15); setViewDate(d); };
   const handleNextCutoff = () => { const d = new Date(viewDate); d.setDate(d.getDate() + 15); setViewDate(d); };
@@ -27,168 +28,233 @@ export default function EmployeeProfiles({ employees }) {
 
   const currentCutoff = getCutoffRange(viewDate);
   const cutoffDays = [];
-  let d = new Date(currentCutoff.start);
-  while (d <= currentCutoff.end) { 
-    if (d.getDay() !== 0) cutoffDays.push(new Date(d)); d.setDate(d.getDate() + 1); 
+  let dayTracker = new Date(currentCutoff.start);
+  while (dayTracker <= currentCutoff.end) {
+    if (dayTracker.getDay() !== 0) cutoffDays.push(new Date(dayTracker)); // Skip Sunday
+    dayTracker.setDate(dayTracker.getDate() + 1);
   }
 
   const fetchLogs = async () => {
     const { data } = await supabase.from('attendance_logs').select('*');
     const mapped = {};
     data?.forEach(log => mapped[`${log.employee_id}-${log.log_date}`] = log.status);
-    setAttendanceLogs(mapped);
+    setAttendanceData(mapped);
   };
 
   useEffect(() => { fetchLogs(); }, [viewDate]);
 
-  return (
-    <div>
-      <div className="space-y-8 animate-in fade-in duration-700 print:hidden">
-         <div className="flex flex-col md:flex-row justify-between items-end gap-6">
-           <div className="space-y-2">
-              <h1 className="text-4xl font-black tracking-tighter uppercase text-slate-900">Personnel Hub</h1>
-              <div className="flex items-center gap-3 bg-white border border-slate-200 p-2 rounded-2xl shadow-sm">
-                 <button onClick={handlePrevCutoff} className="p-2 hover:bg-slate-50 rounded-xl transition-all"><ChevronLeft size={18}/></button>
-                 <span className="text-[10px] font-black uppercase tracking-widest text-indigo-600 px-4">{currentCutoff.label}</span>
-                 <button onClick={handleNextCutoff} className="p-2 hover:bg-slate-50 rounded-xl transition-all"><ChevronRight size={18}/></button>
-              </div>
-           </div>
-           <div className="relative w-full md:w-80">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-              <input type="text" placeholder="Find your profile..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm font-bold outline-none" />
-           </div>
-         </div>
+  const handleSave = async (empId, empName) => {
+    setIsSaving(true);
+    const todayDBStr = getDBDateStr(new Date());
+    const logsToUpload = []; 
+    const logsToDelete = []; 
 
-         <div className="grid grid-cols-1 gap-6">
-            {employees.filter(e => e.name.toLowerCase().includes(searchTerm.toLowerCase())).map(emp => {
-              const todayDBStr = getDBDateStr(new Date());
-              let present = 0, absent = 0, holiday = 0;
+    cutoffDays.forEach(date => {
+      const dbDate = getDBDateStr(date);
+      const isFuture = dbDate > todayDBStr;
+      let status = attendanceData[`${empId}-${dbDate}`];
 
-              cutoffDays.forEach(d => {
-                const dbDate = getDBDateStr(d);
-                if (dbDate > todayDBStr) return; 
-                const status = attendanceLogs[`${emp.id}-${dbDate}`];
-                if (status === 'present') present++; else if (status === 'holiday') holiday++; else if (status === 'absent' || !status) absent++;
-              });
+      if (isFuture) {
+        logsToDelete.push(dbDate);
+      } else {
+        if (!status) status = 'absent';
+        logsToUpload.push({ employee_id: empId, log_date: dbDate, status });
+      }
+    });
 
-              return (
-                <div key={emp.id} className="bg-white border border-slate-200 rounded-[2.5rem] shadow-sm overflow-hidden hover:shadow-md transition-shadow">
-                   <div onClick={() => setExpandedId(expandedId === emp.id ? null : emp.id)} className="p-8 flex items-center justify-between cursor-pointer hover:bg-slate-50/50 transition-colors">
-                      <div className="flex items-center gap-6">
-                         <div className="w-20 h-20 rounded-[1.5rem] border-4 border-slate-50 shadow-sm overflow-hidden bg-white p-1">
-                            {emp.photo ? <img src={emp.photo} className="w-full h-full object-cover rounded-xl" /> : <User className="text-slate-200 m-auto h-full" size={32} />}
-                         </div>
-                         <div>
-                            <h4 className="text-2xl font-black text-slate-900 leading-tight tracking-tight">{emp.name}</h4>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">{emp.idNo}</p>
-                         </div>
-                      </div>
-                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${expandedId === emp.id ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-50 text-slate-400 border border-slate-100'}`}>
-                         {expandedId === emp.id ? <ChevronUp size={24} /> : <ChevronDown size={24} />}
-                      </div>
-                   </div>
+    try {
+      if (logsToUpload.length > 0) await supabase.from('attendance_logs').upsert(logsToUpload, { onConflict: 'employee_id, log_date' });
+      if (logsToDelete.length > 0) await supabase.from('attendance_logs').delete().eq('employee_id', empId).in('log_date', logsToDelete);
+      
+      if (typeof logHistory === 'function') logHistory(`Updated attendance for ${empName}`);
+      await fetchLogs(); 
+    } catch (error) { console.error(error); } finally { setIsSaving(false); }
+  };
 
-                   {expandedId === emp.id && (
-                     <div className="p-8 border-t border-slate-100 bg-slate-50/30 animate-in slide-in-from-top-2">
-                        <div className="flex justify-end mb-6">
-                          <button onClick={() => window.print()} className="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 transition-all shadow-md">
-                            <Printer size={16}/> Print Calendar Record
-                          </button>
-                        </div>
-                        <div className="flex flex-col xl:flex-row gap-12">
-                          <div className="flex gap-4 xl:w-64">
-                             <div className="flex-1 bg-indigo-50 py-4 rounded-2xl text-indigo-600 text-center border border-indigo-100/50">
-                                <p className="text-3xl font-black">{present}</p><p className="text-[8px] font-black uppercase tracking-widest mt-1">Present</p>
-                             </div>
-                             <div className="flex-1 bg-amber-50 py-4 rounded-2xl text-amber-500 text-center border border-amber-100/50">
-                                <p className="text-3xl font-black">{holiday}</p><p className="text-[8px] font-black uppercase tracking-widest mt-1">Holiday</p>
-                             </div>
-                             <div className="flex-1 bg-rose-50 py-4 rounded-2xl text-rose-500 text-center border border-rose-100/50">
-                                <p className="text-3xl font-black">{absent}</p><p className="text-[8px] font-black uppercase tracking-widest mt-1">Absent</p>
-                             </div>
-                          </div>
-                          
-                          <div className="flex-1 grid grid-cols-5 sm:grid-cols-7 lg:grid-cols-10 gap-3">
-                             {cutoffDays.map((date, i) => {
-                               const dbDate = getDBDateStr(date); const isFuture = dbDate > todayDBStr; const status = isFuture ? null : attendanceLogs[`${emp.id}-${dbDate}`];
-                               let bgClass = ''; 
-                               if (isFuture) bgClass = 'bg-white text-slate-300 border-2 border-slate-100 opacity-40';
-                               else if (status === 'present') bgClass = 'bg-indigo-600 text-white shadow-lg shadow-indigo-100 border-2 border-indigo-600';
-                               else if (status === 'holiday') bgClass = 'bg-amber-500 text-white shadow-lg shadow-amber-100 border-2 border-amber-500';
-                               else bgClass = 'bg-rose-50 text-rose-500 border-2 border-rose-100';
+  const CutoffCalendar = ({ emp }) => {
+    const todayDBStr = getDBDateStr(new Date());
+    let totalPresent = 0, totalAbsent = 0;
 
-                               return (
-                                 <div key={i} className={`aspect-square rounded-[1.5rem] flex flex-col items-center justify-center text-[10px] font-black transition-all ${bgClass}`}>
-                                   <span className="text-xl tracking-tighter">{date.getDate()}</span>
-                                   <span className="text-[7px] uppercase tracking-widest mt-1 opacity-80">{date.toLocaleString('default', { month: 'short' })}</span>
-                                 </div>
-                               );
-                             })}
-                          </div>
-                        </div>
-                     </div>
-                   )}
-                </div>
-              )
-            })}
-         </div>
-      </div>
+    cutoffDays.forEach(d => {
+      const dbDate = getDBDateStr(d); 
+      const isFuture = dbDate > todayDBStr; 
+      const status = attendanceData[`${emp.id}-${dbDate}`];
+      
+      if (isFuture) return; 
 
-      {/* --- PRINT ONLY VIEW: CALENDAR GRID --- */}
-      <div className="hidden print:block text-black bg-white p-8">
-        {employees.filter(e => e.id === expandedId).map(emp => {
-            const todayDBStr = getDBDateStr(new Date());
-            let p = 0, a = 0, h = 0;
-            cutoffDays.forEach(d => {
-              const dbDate = getDBDateStr(d);
-              if (dbDate > todayDBStr) return; 
-              const status = attendanceLogs[`${emp.id}-${dbDate}`];
-              if (status === 'present') p++; else if (status === 'holiday') h++; else if (status === 'absent' || !status) a++;
-            });
+      if (status === 'present') totalPresent++; 
+      else if (status === 'absent' || !status) totalAbsent++;
+    });
 
+    // Simplified toggle: Present -> Absent -> null
+    const handleToggle = (dbDate, currentStatus) => {
+      let nextStatus = 'present'; 
+      if (currentStatus === 'present') nextStatus = 'absent'; 
+      else if (currentStatus === 'absent') nextStatus = null; 
+      setAttendanceData(prev => ({...prev, [`${emp.id}-${dbDate}`]: nextStatus}));
+    };
+
+    return (
+      <div className="bg-slate-50 p-10 border-t border-slate-100 animate-in slide-in-from-top-2">
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-8">
+          <div className="flex gap-4">
+             <div className="bg-indigo-600 px-6 py-3 rounded-2xl text-white shadow-lg w-32"><p className="text-[10px] font-black uppercase opacity-60">Present</p><p className="text-2xl font-black">{totalPresent}</p></div>
+             <div className="bg-white px-6 py-3 rounded-2xl border border-slate-200 w-32"><p className="text-[10px] font-black text-slate-400 uppercase">Absent</p><p className="text-2xl font-black text-slate-900">{totalAbsent}</p></div>
+          </div>
+          <button onClick={() => handleSave(emp.id, emp.name)} disabled={isSaving} className="w-full lg:w-auto flex items-center justify-center gap-2 px-8 py-4 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-xl disabled:opacity-50">
+            {isSaving ? "Saving..." : <><Save size={16}/> Update Record</>}
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-7 xl:grid-cols-8 gap-3">
+          {cutoffDays.map((date, i) => {
+            const dbDate = getDBDateStr(date); const status = attendanceData[`${emp.id}-${dbDate}`]; const isFuture = dbDate > todayDBStr; const isToday = dbDate === todayDBStr;
+            let bgClass = '';
+            if (isFuture) bgClass = 'bg-slate-100 border-slate-200 text-slate-300 opacity-60 cursor-not-allowed';
+            else {
+              bgClass = 'bg-white border-slate-200 text-slate-400 hover:border-indigo-200 cursor-pointer'; 
+              if (status === 'present') bgClass = 'bg-indigo-600 border-indigo-600 text-white shadow-lg cursor-pointer';
+              if (status === 'absent' || (!status && !isFuture)) bgClass = 'bg-rose-50 border-rose-100 text-rose-500 cursor-pointer'; 
+            }
             return (
-              <div key={`print-${emp.id}`}>
-                <div className="flex items-center gap-6 mb-8 border-b-2 border-black pb-6">
-                   <div className="w-24 h-24 rounded-xl border-2 border-black overflow-hidden bg-white p-1">
-                      {emp.photo ? <img src={emp.photo} className="w-full h-full object-cover grayscale" /> : <User className="m-auto h-full text-black" size={40} />}
-                   </div>
-                   <div>
-                      <h2 className="text-2xl font-black uppercase tracking-widest text-gray-500 mb-1">Individual Calendar Record</h2>
-                      <h3 className="text-4xl font-black uppercase leading-none">{emp.name}</h3>
-                      <p className="text-lg font-mono font-bold mt-2">ID: {emp.idNo} | {currentCutoff.label}</p>
-                   </div>
-                </div>
-
-                <div className="flex gap-10 mb-8 border-2 border-black p-4 bg-gray-100">
-                  <p className="text-lg font-bold uppercase"><span className="text-sm font-normal text-gray-600 block">Total Present</span> {p} Days</p>
-                  <p className="text-lg font-bold uppercase"><span className="text-sm font-normal text-gray-600 block">Total Absent</span> {a} Days</p>
-                  <p className="text-lg font-bold uppercase"><span className="text-sm font-normal text-gray-600 block">Total Holiday</span> {h} Days</p>
-                </div>
-
-                <h4 className="text-sm font-black uppercase tracking-widest mb-4">Calendar Grid</h4>
-                {/* Visual Box Calendar for Print */}
-                <div className="grid grid-cols-5 gap-4">
-                  {cutoffDays.map((date, i) => {
-                    const dbDate = getDBDateStr(date);
-                    if (dbDate > todayDBStr) return null; // Hide future dates
-                    
-                    const status = attendanceLogs[`${emp.id}-${dbDate}`];
-                    let text = "ABSENT";
-                    if (status === 'present') text = "PRESENT";
-                    if (status === 'holiday') text = "HOLIDAY";
-
-                    return (
-                      <div key={i} className="border-2 border-black flex flex-col items-center justify-center p-4">
-                        <span className="text-[10px] font-bold uppercase tracking-widest mb-1">{date.toLocaleDateString('en-US', { weekday: 'short', month: 'short' })}</span>
-                        <span className="text-4xl font-black mb-1">{date.getDate()}</span>
-                        <span className="text-sm font-bold uppercase border-t-2 border-black w-full text-center pt-2">{text}</span>
-                      </div>
-                    );
-                  })}
-                </div>
+              <div key={i} onClick={isFuture ? undefined : () => handleToggle(dbDate, status)} className={`relative p-4 rounded-2xl border-2 flex flex-col items-center justify-center gap-1 transition-all group ${bgClass} ${isToday ? 'ring-4 ring-indigo-500/20 scale-[1.02] z-10' : ''}`}>
+                {isToday && <span className="absolute -top-2 bg-rose-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest">Today</span>}
+                {isFuture && <Lock size={12} className="absolute top-3 right-3 opacity-30" />}
+                <span className="text-[9px] font-black uppercase tracking-widest opacity-60 mt-1">{date.toLocaleDateString('en-US', { weekday: 'short' })}</span>
+                <span className="text-2xl font-black leading-none">{date.getDate()}</span>
+                <span className="text-[9px] font-bold opacity-80 uppercase">{date.toLocaleString('default', { month: 'short' })}</span>
               </div>
             );
-        })}
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div>
+      <div className="space-y-8 animate-in fade-in duration-500 print:hidden">
+        <div className="flex flex-col md:flex-row justify-between items-end gap-6">
+          <div>
+            <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase">Attendance Manager</h1>
+            <div className="flex items-center gap-4 mt-2">
+              <button onClick={handlePrevCutoff} className="p-2 hover:bg-slate-100 rounded-lg transition-all"><ChevronLeft size={20}/></button>
+              <p className="font-bold text-indigo-600 uppercase text-xs tracking-widest bg-indigo-50 px-4 py-2 rounded-full">{currentCutoff.label}</p>
+              <button onClick={handleNextCutoff} className="p-2 hover:bg-slate-100 rounded-lg transition-all"><ChevronRight size={20}/></button>
+            </div>
+          </div>
+          <div className="flex items-center gap-4 w-full md:w-auto">
+            <div className="relative w-full md:w-64">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+              <input type="text" placeholder="Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm font-bold outline-none" />
+            </div>
+            <button onClick={() => window.print()} className="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl">
+              <Printer size={16}/> Print Report
+            </button>
+          </div>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-[3.5rem] shadow-sm overflow-hidden">
+          <table className="w-full text-left">
+            <tbody className="divide-y divide-slate-50">
+              {employees.filter(e => e.name.toLowerCase().includes(searchTerm.toLowerCase())).map((emp) => (
+                <React.Fragment key={emp.id}>
+                  <tr className={`cursor-pointer group transition-colors ${expandedId === emp.id ? 'bg-indigo-50/40' : 'hover:bg-slate-50/50'}`} onClick={() => setExpandedId(expandedId === emp.id ? null : emp.id)}>
+                    <td className="px-12 py-6 flex items-center gap-6">
+                      <div className="w-16 h-16 rounded-[1.5rem] border-2 bg-white overflow-hidden p-1 shadow-sm">
+                        {emp.photo ? <img src={emp.photo} className="w-full h-full object-cover rounded-xl" alt="" /> : <User className="text-slate-200 m-auto" size={32} />}
+                      </div>
+                      <div>
+                        <p className="font-black text-slate-900 text-xl tracking-tight leading-tight">{emp.name}</p>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">{emp.idNo}</p>
+                      </div>
+                    </td>
+                    <td className="px-12 py-6 text-right">
+                      <div className={`inline-flex items-center justify-center w-12 h-12 rounded-2xl transition-all ${expandedId === emp.id ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-50 text-slate-400'}`}>
+                        {expandedId === emp.id ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                      </div>
+                    </td>
+                  </tr>
+                  {expandedId === emp.id && (<tr><td colSpan="2" className="p-0 border-none"><CutoffCalendar emp={emp} /></td></tr>)}
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* --- PRINT ONLY VIEW: OVERALL MATRIX --- */}
+      <div className="hidden print:block text-black bg-white p-4">
+        <div className="flex justify-between items-end mb-6 border-b-2 border-black pb-4">
+          <div>
+            <h2 className="text-2xl font-bold uppercase tracking-tight">JAHS Electronic and Electrical Service</h2>
+            <h3 className="text-lg font-semibold uppercase tracking-widest text-gray-600 mt-1">Overall Attendance Record</h3>
+            <p className="text-sm font-bold mt-2 inline-block px-3 py-1 bg-gray-100 border border-black">{currentCutoff.label}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs font-bold uppercase tracking-wider text-gray-500">Date Printed</p>
+            <p className="text-sm font-bold">{new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
+          </div>
+        </div>
+
+        <table className="w-full border-collapse border border-black text-center text-xs">
+          <thead>
+            <tr className="bg-gray-200 font-bold uppercase">
+              <th className="border border-black p-2 text-left w-48">Personnel Name</th>
+              {cutoffDays.map((d, i) => (
+                <th key={i} className="border border-black p-1 leading-tight text-[9px]">
+                  <div>{d.toLocaleDateString('en-US', { weekday: 'narrow' })}</div>
+                  <div className="text-sm">{d.getDate()}</div>
+                </th>
+              ))}
+              <th className="border border-black p-1 w-10 text-green-700">P</th>
+              <th className="border border-black p-1 w-10 text-red-700">A</th>
+            </tr>
+          </thead>
+          <tbody>
+            {employees.map(emp => {
+              const todayDBStr = getDBDateStr(new Date());
+              let p = 0, a = 0;
+
+              return (
+                <tr key={`print-${emp.id}`} className="border-b border-gray-300">
+                  <td className="border border-black p-2 text-left whitespace-nowrap">
+                    <span className="font-bold">{emp.name}</span><br/>
+                    <span className="font-mono text-[9px] text-gray-500">{emp.idNo}</span>
+                  </td>
+                  
+                  {cutoffDays.map((d, i) => {
+                    const dbDate = getDBDateStr(d);
+                    const isFuture = dbDate > todayDBStr;
+                    
+                    if (isFuture) return <td key={i} className="border border-black text-gray-300">-</td>;
+                    
+                    const status = attendanceData[`${emp.id}-${dbDate}`];
+                    let mark = 'A';
+                    if (status === 'present') { mark = 'P'; p++; }
+                    else { a++; } // Absent
+
+                    return <td key={i} className={`border border-black font-bold ${mark === 'A' ? 'text-red-600' : 'text-green-700'}`}>{mark}</td>;
+                  })}
+                  
+                  <td className="border border-black font-black bg-gray-100 text-green-700">{p}</td>
+                  <td className="border border-black font-black bg-gray-100 text-red-600">{a}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        
+        <div className="mt-12 flex justify-between px-10">
+          <div className="text-center">
+            <div className="border-b border-black w-48 mb-2"></div>
+            <p className="text-[10px] font-bold uppercase tracking-widest">Prepared By</p>
+          </div>
+          <div className="text-center">
+            <div className="border-b border-black w-48 mb-2"></div>
+            <p className="text-[10px] font-bold uppercase tracking-widest">Approved By</p>
+          </div>
+        </div>
       </div>
     </div>
   );

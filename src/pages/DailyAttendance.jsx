@@ -30,7 +30,7 @@ export default function DailyAttendance({ employees, logHistory }) {
   const cutoffDays = [];
   let dayTracker = new Date(currentCutoff.start);
   while (dayTracker <= currentCutoff.end) {
-    if (dayTracker.getDay() !== 0) cutoffDays.push(new Date(dayTracker)); 
+    if (dayTracker.getDay() !== 0) cutoffDays.push(new Date(dayTracker)); // Skip Sunday
     dayTracker.setDate(dayTracker.getDate() + 1);
   }
 
@@ -46,15 +46,17 @@ export default function DailyAttendance({ employees, logHistory }) {
   const handleSave = async (empId, empName) => {
     setIsSaving(true);
     const todayDBStr = getDBDateStr(new Date());
-    const logsToUpload = []; const logsToDelete = []; 
+    const logsToUpload = []; 
+    const logsToDelete = []; 
 
     cutoffDays.forEach(date => {
       const dbDate = getDBDateStr(date);
       const isFuture = dbDate > todayDBStr;
       let status = attendanceData[`${empId}-${dbDate}`];
 
-      if (isFuture) logsToDelete.push(dbDate);
-      else {
+      if (isFuture) {
+        logsToDelete.push(dbDate);
+      } else {
         if (!status) status = 'absent';
         logsToUpload.push({ employee_id: empId, log_date: dbDate, status });
       }
@@ -63,6 +65,7 @@ export default function DailyAttendance({ employees, logHistory }) {
     try {
       if (logsToUpload.length > 0) await supabase.from('attendance_logs').upsert(logsToUpload, { onConflict: 'employee_id, log_date' });
       if (logsToDelete.length > 0) await supabase.from('attendance_logs').delete().eq('employee_id', empId).in('log_date', logsToDelete);
+      
       if (typeof logHistory === 'function') logHistory(`Updated attendance for ${empName}`);
       await fetchLogs(); 
     } catch (error) { console.error(error); } finally { setIsSaving(false); }
@@ -70,17 +73,24 @@ export default function DailyAttendance({ employees, logHistory }) {
 
   const CutoffCalendar = ({ emp }) => {
     const todayDBStr = getDBDateStr(new Date());
-    let totalPresent = 0, totalHoliday = 0, totalAbsent = 0;
+    let totalPresent = 0, totalAbsent = 0;
 
     cutoffDays.forEach(d => {
-      const dbDate = getDBDateStr(d); const isFuture = dbDate > todayDBStr; const status = attendanceData[`${emp.id}-${dbDate}`];
+      const dbDate = getDBDateStr(d); 
+      const isFuture = dbDate > todayDBStr; 
+      const status = attendanceData[`${emp.id}-${dbDate}`];
+      
       if (isFuture) return; 
-      if (status === 'present') totalPresent++; else if (status === 'holiday') totalHoliday++; else if (status === 'absent' || !status) totalAbsent++;
+
+      if (status === 'present') totalPresent++; 
+      else if (status === 'absent' || !status) totalAbsent++;
     });
 
+    // Simplified toggle: Present -> Absent -> null
     const handleToggle = (dbDate, currentStatus) => {
       let nextStatus = 'present'; 
-      if (currentStatus === 'present') nextStatus = 'holiday'; else if (currentStatus === 'holiday') nextStatus = 'absent'; else if (currentStatus === 'absent') nextStatus = null; 
+      if (currentStatus === 'present') nextStatus = 'absent'; 
+      else if (currentStatus === 'absent') nextStatus = null; 
       setAttendanceData(prev => ({...prev, [`${emp.id}-${dbDate}`]: nextStatus}));
     };
 
@@ -89,7 +99,6 @@ export default function DailyAttendance({ employees, logHistory }) {
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-8">
           <div className="flex gap-4">
              <div className="bg-indigo-600 px-6 py-3 rounded-2xl text-white shadow-lg w-32"><p className="text-[10px] font-black uppercase opacity-60">Present</p><p className="text-2xl font-black">{totalPresent}</p></div>
-             <div className="bg-amber-500 px-6 py-3 rounded-2xl text-white shadow-lg w-32"><p className="text-[10px] font-black uppercase opacity-60">Holiday</p><p className="text-2xl font-black">{totalHoliday}</p></div>
              <div className="bg-white px-6 py-3 rounded-2xl border border-slate-200 w-32"><p className="text-[10px] font-black text-slate-400 uppercase">Absent</p><p className="text-2xl font-black text-slate-900">{totalAbsent}</p></div>
           </div>
           <button onClick={() => handleSave(emp.id, emp.name)} disabled={isSaving} className="w-full lg:w-auto flex items-center justify-center gap-2 px-8 py-4 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-xl disabled:opacity-50">
@@ -105,7 +114,6 @@ export default function DailyAttendance({ employees, logHistory }) {
             else {
               bgClass = 'bg-white border-slate-200 text-slate-400 hover:border-indigo-200 cursor-pointer'; 
               if (status === 'present') bgClass = 'bg-indigo-600 border-indigo-600 text-white shadow-lg cursor-pointer';
-              if (status === 'holiday') bgClass = 'bg-amber-500 border-amber-500 text-white shadow-lg cursor-pointer';
               if (status === 'absent' || (!status && !isFuture)) bgClass = 'bg-rose-50 border-rose-100 text-rose-500 cursor-pointer'; 
             }
             return (
@@ -193,22 +201,20 @@ export default function DailyAttendance({ employees, logHistory }) {
           <thead>
             <tr className="bg-gray-200 font-bold uppercase">
               <th className="border border-black p-2 text-left w-48">Personnel Name</th>
-              {/* Generate columns for every day in the cutoff */}
               {cutoffDays.map((d, i) => (
                 <th key={i} className="border border-black p-1 leading-tight text-[9px]">
                   <div>{d.toLocaleDateString('en-US', { weekday: 'narrow' })}</div>
                   <div className="text-sm">{d.getDate()}</div>
                 </th>
               ))}
-              <th className="border border-black p-1 w-8">P</th>
-              <th className="border border-black p-1 w-8">A</th>
-              <th className="border border-black p-1 w-8">H</th>
+              <th className="border border-black p-1 w-10 text-green-700">P</th>
+              <th className="border border-black p-1 w-10 text-red-700">A</th>
             </tr>
           </thead>
           <tbody>
             {employees.map(emp => {
               const todayDBStr = getDBDateStr(new Date());
-              let p = 0, a = 0, h = 0;
+              let p = 0, a = 0;
 
               return (
                 <tr key={`print-${emp.id}`} className="border-b border-gray-300">
@@ -217,7 +223,6 @@ export default function DailyAttendance({ employees, logHistory }) {
                     <span className="font-mono text-[9px] text-gray-500">{emp.idNo}</span>
                   </td>
                   
-                  {/* Fill in the P/A/H Matrix */}
                   {cutoffDays.map((d, i) => {
                     const dbDate = getDBDateStr(d);
                     const isFuture = dbDate > todayDBStr;
@@ -227,16 +232,13 @@ export default function DailyAttendance({ employees, logHistory }) {
                     const status = attendanceData[`${emp.id}-${dbDate}`];
                     let mark = 'A';
                     if (status === 'present') { mark = 'P'; p++; }
-                    else if (status === 'holiday') { mark = 'H'; h++; }
                     else { a++; } // Absent
 
-                    return <td key={i} className={`border border-black font-bold ${mark === 'A' ? 'text-red-600' : ''}`}>{mark}</td>;
+                    return <td key={i} className={`border border-black font-bold ${mark === 'A' ? 'text-red-600' : 'text-green-700'}`}>{mark}</td>;
                   })}
                   
-                  {/* Totals */}
-                  <td className="border border-black font-black bg-gray-100">{p}</td>
+                  <td className="border border-black font-black bg-gray-100 text-green-700">{p}</td>
                   <td className="border border-black font-black bg-gray-100 text-red-600">{a}</td>
-                  <td className="border border-black font-black bg-gray-100">{h}</td>
                 </tr>
               );
             })}
