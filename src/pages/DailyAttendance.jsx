@@ -86,7 +86,6 @@ export default function DailyAttendance({ employees, logHistory }) {
       else if (status === 'absent' || !status) totalAbsent++;
     });
 
-    // Simplified toggle: Present -> Absent -> null
     const handleToggle = (dbDate, currentStatus) => {
       let nextStatus = 'present'; 
       if (currentStatus === 'present') nextStatus = 'absent'; 
@@ -137,11 +136,20 @@ export default function DailyAttendance({ employees, logHistory }) {
         <div className="flex flex-col md:flex-row justify-between items-end gap-6">
           <div>
             <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase">Attendance Manager</h1>
-            <div className="flex items-center gap-4 mt-2">
-              <button onClick={handlePrevCutoff} className="p-2 hover:bg-slate-100 rounded-lg transition-all"><ChevronLeft size={20}/></button>
-              <p className="font-bold text-indigo-600 uppercase text-xs tracking-widest bg-indigo-50 px-4 py-2 rounded-full">{currentCutoff.label}</p>
-              <button onClick={handleNextCutoff} className="p-2 hover:bg-slate-100 rounded-lg transition-all"><ChevronRight size={20}/></button>
+            
+            {/* --- UI UPDATE: Larger Date Font & Spacing --- */}
+            <div className="flex items-center gap-4 mt-3">
+              <button onClick={handlePrevCutoff} className="p-2 hover:bg-slate-100 rounded-xl transition-all text-slate-400 hover:text-indigo-600">
+                <ChevronLeft size={24}/>
+              </button>
+              <p className="font-black text-indigo-600 uppercase text-sm md:text-base tracking-widest bg-indigo-50 px-6 py-2.5 rounded-full shadow-sm">
+                {currentCutoff.label}
+              </p>
+              <button onClick={handleNextCutoff} className="p-2 hover:bg-slate-100 rounded-xl transition-all text-slate-400 hover:text-indigo-600">
+                <ChevronRight size={24}/>
+              </button>
             </div>
+
           </div>
           <div className="flex items-center gap-4 w-full md:w-auto">
             <div className="relative w-full md:w-64">
@@ -226,13 +234,12 @@ export default function DailyAttendance({ employees, logHistory }) {
                   {cutoffDays.map((d, i) => {
                     const dbDate = getDBDateStr(d);
                     const isFuture = dbDate > todayDBStr;
-                    
                     if (isFuture) return <td key={i} className="border border-black text-gray-300">-</td>;
                     
                     const status = attendanceData[`${emp.id}-${dbDate}`];
                     let mark = 'A';
                     if (status === 'present') { mark = 'P'; p++; }
-                    else { a++; } // Absent
+                    else { a++; }
 
                     return <td key={i} className={`border border-black font-bold ${mark === 'A' ? 'text-red-600' : 'text-green-700'}`}>{mark}</td>;
                   })}
