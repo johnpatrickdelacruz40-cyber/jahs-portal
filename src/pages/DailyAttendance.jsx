@@ -57,7 +57,7 @@ export default function DailyAttendance({ employees, logHistory }) {
       if (isFuture) {
         logsToDelete.push(dbDate);
       } else {
-        if (!status) status = 'absent';
+        if (!status) status = 'absent'; 
         logsToUpload.push({ employee_id: empId, log_date: dbDate, status });
       }
     });
@@ -73,7 +73,7 @@ export default function DailyAttendance({ employees, logHistory }) {
 
   const CutoffCalendar = ({ emp }) => {
     const todayDBStr = getDBDateStr(new Date());
-    let totalPresent = 0, totalAbsent = 0;
+    let totalPresent = 0, totalLeave = 0, totalNoWork = 0;
 
     cutoffDays.forEach(d => {
       const dbDate = getDBDateStr(d); 
@@ -83,12 +83,15 @@ export default function DailyAttendance({ employees, logHistory }) {
       if (isFuture) return; 
 
       if (status === 'present') totalPresent++; 
-      else if (status === 'absent' || !status) totalAbsent++;
+      else if (status === 'leave') totalLeave++; 
+      else if (status === 'absent' || !status) totalNoWork++;
     });
 
+    // 4-step toggle: Present -> Leave -> Absent(No Work) -> Clear
     const handleToggle = (dbDate, currentStatus) => {
       let nextStatus = 'present'; 
-      if (currentStatus === 'present') nextStatus = 'absent'; 
+      if (currentStatus === 'present') nextStatus = 'leave'; 
+      else if (currentStatus === 'leave') nextStatus = 'absent';
       else if (currentStatus === 'absent') nextStatus = null; 
       setAttendanceData(prev => ({...prev, [`${emp.id}-${dbDate}`]: nextStatus}));
     };
@@ -98,7 +101,8 @@ export default function DailyAttendance({ employees, logHistory }) {
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-8">
           <div className="flex gap-4">
              <div className="bg-indigo-600 px-6 py-3 rounded-2xl text-white shadow-lg w-32"><p className="text-[10px] font-black uppercase opacity-60">Present</p><p className="text-2xl font-black">{totalPresent}</p></div>
-             <div className="bg-white px-6 py-3 rounded-2xl border border-slate-200 w-32"><p className="text-[10px] font-black text-slate-400 uppercase">Absent</p><p className="text-2xl font-black text-slate-900">{totalAbsent}</p></div>
+             <div className="bg-amber-500 px-6 py-3 rounded-2xl text-white shadow-lg w-32"><p className="text-[10px] font-black uppercase opacity-60">Leave</p><p className="text-2xl font-black">{totalLeave}</p></div>
+             <div className="bg-white px-6 py-3 rounded-2xl border border-slate-200 w-32"><p className="text-[10px] font-black text-slate-400 uppercase">No Work</p><p className="text-2xl font-black text-slate-900">{totalNoWork}</p></div>
           </div>
           <button onClick={() => handleSave(emp.id, emp.name)} disabled={isSaving} className="w-full lg:w-auto flex items-center justify-center gap-2 px-8 py-4 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-xl disabled:opacity-50">
             {isSaving ? "Saving..." : <><Save size={16}/> Update Record</>}
@@ -113,6 +117,7 @@ export default function DailyAttendance({ employees, logHistory }) {
             else {
               bgClass = 'bg-white border-slate-200 text-slate-400 hover:border-indigo-200 cursor-pointer'; 
               if (status === 'present') bgClass = 'bg-indigo-600 border-indigo-600 text-white shadow-lg cursor-pointer';
+              if (status === 'leave') bgClass = 'bg-amber-500 border-amber-500 text-white shadow-lg cursor-pointer';
               if (status === 'absent' || (!status && !isFuture)) bgClass = 'bg-rose-50 border-rose-100 text-rose-500 cursor-pointer'; 
             }
             return (
@@ -137,7 +142,6 @@ export default function DailyAttendance({ employees, logHistory }) {
           <div>
             <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase">Attendance Manager</h1>
             
-            {/* --- UI UPDATE: Larger Date Font & Spacing --- */}
             <div className="flex items-center gap-4 mt-3">
               <button onClick={handlePrevCutoff} className="p-2 hover:bg-slate-100 rounded-xl transition-all text-slate-400 hover:text-indigo-600">
                 <ChevronLeft size={24}/>
@@ -215,14 +219,15 @@ export default function DailyAttendance({ employees, logHistory }) {
                   <div className="text-sm">{d.getDate()}</div>
                 </th>
               ))}
-              <th className="border border-black p-1 w-10 text-green-700">P</th>
-              <th className="border border-black p-1 w-10 text-red-700">A</th>
+              <th className="border border-black p-1 w-8 text-green-700">P</th>
+              <th className="border border-black p-1 w-8 text-amber-600">L</th>
+              <th className="border border-black p-1 w-8 text-red-700">NW</th>
             </tr>
           </thead>
           <tbody>
             {employees.map(emp => {
               const todayDBStr = getDBDateStr(new Date());
-              let p = 0, a = 0;
+              let p = 0, l = 0, nw = 0;
 
               return (
                 <tr key={`print-${emp.id}`} className="border-b border-gray-300">
@@ -237,15 +242,19 @@ export default function DailyAttendance({ employees, logHistory }) {
                     if (isFuture) return <td key={i} className="border border-black text-gray-300">-</td>;
                     
                     const status = attendanceData[`${emp.id}-${dbDate}`];
-                    let mark = 'A';
-                    if (status === 'present') { mark = 'P'; p++; }
-                    else { a++; }
+                    let mark = 'NW';
+                    let textColor = 'text-red-600';
+                    
+                    if (status === 'present') { mark = 'P'; textColor = 'text-green-700'; p++; }
+                    else if (status === 'leave') { mark = 'L'; textColor = 'text-amber-600'; l++; }
+                    else { nw++; }
 
-                    return <td key={i} className={`border border-black font-bold ${mark === 'A' ? 'text-red-600' : 'text-green-700'}`}>{mark}</td>;
+                    return <td key={i} className={`border border-black font-bold ${textColor}`}>{mark}</td>;
                   })}
                   
                   <td className="border border-black font-black bg-gray-100 text-green-700">{p}</td>
-                  <td className="border border-black font-black bg-gray-100 text-red-600">{a}</td>
+                  <td className="border border-black font-black bg-gray-100 text-amber-600">{l}</td>
+                  <td className="border border-black font-black bg-gray-100 text-red-600">{nw}</td>
                 </tr>
               );
             })}

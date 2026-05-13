@@ -48,15 +48,14 @@ export default function EmployeeProfiles({ employees }) {
            <div className="space-y-2">
               <h1 className="text-4xl font-black tracking-tighter uppercase text-slate-900">Personnel Hub</h1>
               
-              {/* --- UI UPDATE: Larger Date Font & Spacing --- */}
               <div className="flex items-center gap-4 mt-3">
-                 <button onClick={handlePrevCutoff} className="p-2 hover:bg-slate-100 rounded-xl transition-all text-slate-400 hover:text-indigo-600">
+                 <button onClick={handlePrevCutoff} className="p-2 hover:bg-slate-50 rounded-xl transition-all text-slate-400 hover:text-indigo-600">
                    <ChevronLeft size={24}/>
                  </button>
                  <p className="font-black text-indigo-600 uppercase text-sm md:text-base tracking-widest bg-indigo-50 px-6 py-2.5 rounded-full shadow-sm">
                    {currentCutoff.label}
                  </p>
-                 <button onClick={handleNextCutoff} className="p-2 hover:bg-slate-100 rounded-xl transition-all text-slate-400 hover:text-indigo-600">
+                 <button onClick={handleNextCutoff} className="p-2 hover:bg-slate-50 rounded-xl transition-all text-slate-400 hover:text-indigo-600">
                    <ChevronRight size={24}/>
                  </button>
               </div>
@@ -71,13 +70,13 @@ export default function EmployeeProfiles({ employees }) {
          <div className="grid grid-cols-1 gap-6">
             {employees.filter(e => e.name.toLowerCase().includes(searchTerm.toLowerCase())).map(emp => {
               const todayDBStr = getDBDateStr(new Date());
-              let present = 0, absent = 0;
+              let present = 0, leave = 0, noWork = 0;
 
               cutoffDays.forEach(d => {
                 const dbDate = getDBDateStr(d);
                 if (dbDate > todayDBStr) return; 
                 const status = attendanceLogs[`${emp.id}-${dbDate}`];
-                if (status === 'present') present++; else if (status === 'absent' || !status) absent++;
+                if (status === 'present') present++; else if (status === 'leave') leave++; else if (status === 'absent' || !status) noWork++;
               });
 
               return (
@@ -105,12 +104,15 @@ export default function EmployeeProfiles({ employees }) {
                           </button>
                         </div>
                         <div className="flex flex-col xl:flex-row gap-12">
-                          <div className="flex gap-4 xl:w-64">
+                          <div className="flex gap-4 xl:w-80">
                              <div className="flex-1 bg-indigo-50 py-4 rounded-2xl text-indigo-600 text-center border border-indigo-100/50">
                                 <p className="text-3xl font-black">{present}</p><p className="text-[8px] font-black uppercase tracking-widest mt-1">Present</p>
                              </div>
+                             <div className="flex-1 bg-amber-50 py-4 rounded-2xl text-amber-500 text-center border border-amber-100/50">
+                                <p className="text-3xl font-black">{leave}</p><p className="text-[8px] font-black uppercase tracking-widest mt-1">Leave</p>
+                             </div>
                              <div className="flex-1 bg-rose-50 py-4 rounded-2xl text-rose-500 text-center border border-rose-100/50">
-                                <p className="text-3xl font-black">{absent}</p><p className="text-[8px] font-black uppercase tracking-widest mt-1">Absent</p>
+                                <p className="text-3xl font-black">{noWork}</p><p className="text-[8px] font-black uppercase tracking-widest mt-1">No Work</p>
                              </div>
                           </div>
                           
@@ -120,6 +122,7 @@ export default function EmployeeProfiles({ employees }) {
                                let bgClass = ''; 
                                if (isFuture) bgClass = 'bg-white text-slate-300 border-2 border-slate-100 opacity-40';
                                else if (status === 'present') bgClass = 'bg-indigo-600 text-white shadow-lg shadow-indigo-100 border-2 border-indigo-600';
+                               else if (status === 'leave') bgClass = 'bg-amber-500 text-white shadow-lg shadow-amber-100 border-2 border-amber-500';
                                else bgClass = 'bg-rose-50 text-rose-500 border-2 border-rose-100';
 
                                return (
@@ -143,12 +146,12 @@ export default function EmployeeProfiles({ employees }) {
       <div className="hidden print:block text-black bg-white p-8">
         {employees.filter(e => e.id === expandedId).map(emp => {
             const todayDBStr = getDBDateStr(new Date());
-            let p = 0, a = 0;
+            let p = 0, l = 0, nw = 0;
             cutoffDays.forEach(d => {
               const dbDate = getDBDateStr(d);
               if (dbDate > todayDBStr) return; 
               const status = attendanceLogs[`${emp.id}-${dbDate}`];
-              if (status === 'present') p++; else if (status === 'absent' || !status) a++;
+              if (status === 'present') p++; else if (status === 'leave') l++; else if (status === 'absent' || !status) nw++;
             });
 
             return (
@@ -166,7 +169,8 @@ export default function EmployeeProfiles({ employees }) {
 
                 <div className="flex gap-10 mb-8 border-2 border-black p-4 bg-gray-100">
                   <p className="text-lg font-bold uppercase"><span className="text-sm font-normal text-gray-600 block">Total Present</span> <span className="text-green-700">{p}</span> Days</p>
-                  <p className="text-lg font-bold uppercase"><span className="text-sm font-normal text-gray-600 block">Total Absent</span> <span className="text-red-700">{a}</span> Days</p>
+                  <p className="text-lg font-bold uppercase"><span className="text-sm font-normal text-gray-600 block">Total Leave</span> <span className="text-amber-600">{l}</span> Days</p>
+                  <p className="text-lg font-bold uppercase"><span className="text-sm font-normal text-gray-600 block">Total No Work</span> <span className="text-red-700">{nw}</span> Days</p>
                 </div>
 
                 <h4 className="text-sm font-black uppercase tracking-widest mb-4">Calendar Grid</h4>
@@ -176,12 +180,15 @@ export default function EmployeeProfiles({ employees }) {
                     if (dbDate > todayDBStr) return null; 
                     
                     const status = attendanceLogs[`${emp.id}-${dbDate}`];
-                    let text = "ABSENT";
+                    let text = "NO WORK";
                     let textColor = "text-red-600";
 
                     if (status === 'present') { 
                       text = "PRESENT"; 
                       textColor = "text-green-700"; 
+                    } else if (status === 'leave') {
+                      text = "LEAVE"; 
+                      textColor = "text-amber-600"; 
                     }
 
                     return (
