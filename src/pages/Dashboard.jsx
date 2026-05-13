@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { 
   Users, CheckCircle2, XCircle, Clock, 
-  Activity, Video, BarChart3, Radio 
+  Activity, Video, Radio, PieChart 
 } from 'lucide-react';
 
 const getDBDateStr = (dateObj) => {
@@ -38,7 +38,8 @@ export default function Dashboard({ employees }) {
         let p = 0, a = 0;
         data.forEach(log => {
           if (log.status === 'present') p++;
-          if (log.status === 'absent') a++;
+          // Count 'absent' and 'leave' both as non-present for the main overview
+          if (log.status === 'absent' || log.status === 'leave') a++; 
         });
         
         const totalMarked = p + a;
@@ -56,15 +57,10 @@ export default function Dashboard({ employees }) {
   const hour = currentTime.getHours();
   const greeting = hour < 12 ? 'Good Morning' : hour < 18 ? 'Good Afternoon' : 'Good Evening';
 
-  // Mock data for the weekly chart
-  const weeklyData = [
-    { day: 'Mon', percent: 95 },
-    { day: 'Tue', percent: 88 },
-    { day: 'Wed', percent: Math.max(10, Math.floor((todayStats.present / (employees.length || 1)) * 100)) },
-    { day: 'Thu', percent: 0 },
-    { day: 'Fri', percent: 0 },
-    { day: 'Sat', percent: 0 },
-  ];
+  // Chart Calculations
+  const total = employees.length;
+  const pctPresent = total > 0 ? Math.round((todayStats.present / total) * 100) : 0;
+  const pctAbsent = total > 0 ? Math.round((todayStats.absent / total) * 100) : 0;
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700 pb-10 flex flex-col min-h-full">
@@ -79,7 +75,6 @@ export default function Dashboard({ employees }) {
           <p className="text-indigo-200 font-bold uppercase tracking-widest text-xs mb-2 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> System Online
           </p>
-          {/* GREETING CHANGED HERE */}
           <h1 className="text-4xl md:text-5xl font-black tracking-tighter">
             {greeting}.
           </h1>
@@ -105,7 +100,7 @@ export default function Dashboard({ employees }) {
           <div className="w-16 h-16 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400"><Users size={32} /></div>
           <div>
             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Personnel</p>
-            <h3 className="text-4xl font-black text-slate-900 leading-none mt-1">{employees.length}</h3>
+            <h3 className="text-4xl font-black text-slate-900 leading-none mt-1">{total}</h3>
           </div>
         </div>
 
@@ -129,37 +124,59 @@ export default function Dashboard({ employees }) {
       {/* --- BOTTOM SECTION --- */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6 flex-1">
         
-        {/* Analytics Chart */}
+        {/* --- NEW PIE CHART (DOUGHNUT) WIDGET --- */}
         <div className="lg:col-span-2 bg-white rounded-[3rem] border border-slate-100 shadow-sm p-10 flex flex-col justify-between">
-          <div className="flex justify-between items-start mb-10">
+          <div className="flex justify-between items-start mb-8">
             <div>
               <h3 className="text-xl font-black tracking-tight text-slate-900 uppercase flex items-center gap-2">
-                <BarChart3 size={20} className="text-indigo-600" /> Weekly Trends
+                <PieChart size={20} className="text-indigo-600" /> Daily Overview
               </h3>
-              <p className="text-xs font-bold text-slate-400 mt-1">Percentage of personnel present across the active week.</p>
+              <p className="text-xs font-bold text-slate-400 mt-1">Real-time attendance distribution.</p>
             </div>
             <div className="px-4 py-2 bg-slate-50 border border-slate-100 rounded-xl">
-              <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600">Active Week</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600">Today</p>
             </div>
           </div>
 
-          <div className="h-48 flex items-end justify-between gap-2 px-2 md:px-6">
-            {weeklyData.map((data, i) => (
-              <div key={i} className="flex flex-col items-center gap-3 w-full group">
-                <div className="w-full h-40 bg-slate-50 rounded-t-xl relative flex items-end justify-center group-hover:bg-slate-100 transition-colors">
-                  <div 
-                    className={`w-full rounded-t-xl transition-all duration-1000 ${data.percent > 0 ? 'bg-indigo-500 shadow-lg shadow-indigo-100' : 'bg-transparent'}`} 
-                    style={{ height: `${data.percent}%` }}
-                  ></div>
-                  <div className="absolute -top-8 bg-slate-900 text-white text-[10px] font-black px-3 py-1 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                    {data.percent}%
-                  </div>
-                </div>
-                <p className={`text-[10px] font-black uppercase tracking-widest ${data.percent > 0 ? 'text-slate-900' : 'text-slate-300'}`}>
-                  {data.day}
-                </p>
+          <div className="flex-1 flex flex-col md:flex-row items-center justify-center gap-12 py-6">
+            
+            {/* Pure CSS Doughnut Chart using conic-gradient */}
+            <div 
+              className="w-52 h-52 rounded-full flex items-center justify-center shadow-lg transition-all duration-1000 ease-out"
+              style={{
+                background: `conic-gradient(#10b981 ${pctPresent}%, #f43f5e ${pctPresent}% 100%)`
+              }}
+            >
+              {/* Inner White Circle (Creates the "Doughnut" Hole) */}
+              <div className="w-36 h-36 bg-white rounded-full flex flex-col items-center justify-center shadow-inner">
+                <span className="text-4xl font-black text-slate-900 leading-none">{total}</span>
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">Total</span>
               </div>
-            ))}
+            </div>
+
+            {/* Chart Legend */}
+            <div className="flex flex-col gap-6 w-full md:w-auto">
+              <div className="flex items-center gap-4 bg-emerald-50 p-4 rounded-2xl border border-emerald-100">
+                <div className="w-4 h-4 rounded-full bg-emerald-500 shadow-md shadow-emerald-200"></div>
+                <div>
+                  <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest leading-none">Present</p>
+                  <p className="text-2xl font-black text-slate-900 mt-1">
+                    {todayStats.present} <span className="text-sm font-bold text-slate-400 ml-1">({pctPresent}%)</span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4 bg-rose-50 p-4 rounded-2xl border border-rose-100">
+                <div className="w-4 h-4 rounded-full bg-rose-500 shadow-md shadow-rose-200"></div>
+                <div>
+                  <p className="text-[10px] font-bold text-rose-600 uppercase tracking-widest leading-none">Absent / No Work</p>
+                  <p className="text-2xl font-black text-slate-900 mt-1">
+                    {todayStats.absent} <span className="text-sm font-bold text-slate-400 ml-1">({pctAbsent}%)</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
 
