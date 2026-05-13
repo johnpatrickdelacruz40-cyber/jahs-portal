@@ -16,12 +16,8 @@ export default function DailyAttendance({ employees, logHistory }) {
   const [isSaving, setIsSaving] = useState(false);
   const [viewDate, setViewDate] = useState(new Date());
 
-  const handlePrevCutoff = () => {
-    const d = new Date(viewDate); d.setDate(d.getDate() - 15); setViewDate(d);
-  };
-  const handleNextCutoff = () => {
-    const d = new Date(viewDate); d.setDate(d.getDate() + 15); setViewDate(d);
-  };
+  const handlePrevCutoff = () => { const d = new Date(viewDate); d.setDate(d.getDate() - 15); setViewDate(d); };
+  const handleNextCutoff = () => { const d = new Date(viewDate); d.setDate(d.getDate() + 15); setViewDate(d); };
 
   const getCutoffRange = (baseDate) => {
     const year = baseDate.getFullYear(); const month = baseDate.getMonth(); const day = baseDate.getDate();
@@ -47,24 +43,32 @@ export default function DailyAttendance({ employees, logHistory }) {
 
   useEffect(() => { fetchLogs(); }, [viewDate]);
 
+  // --- BUG FIX: SELF CLEANING SAVE ---
   const handleSave = async (empId, empName) => {
     setIsSaving(true);
     const todayDBStr = getDBDateStr(new Date());
-    const logsToUpload = []; const logsToDelete = []; 
+    const logsToUpload = []; 
+    const logsToDelete = []; 
 
     cutoffDays.forEach(date => {
       const dbDate = getDBDateStr(date);
       const isFuture = dbDate > todayDBStr;
       let status = attendanceData[`${empId}-${dbDate}`];
-      if (!status && !isFuture) status = 'absent';
-      if (status) logsToUpload.push({ employee_id: empId, log_date: dbDate, status });
-      else logsToDelete.push(dbDate);
+
+      if (isFuture) {
+        // Force delete ANY future records, even if they are 'ghosts' in the database
+        logsToDelete.push(dbDate);
+      } else {
+        if (!status) status = 'absent';
+        logsToUpload.push({ employee_id: empId, log_date: dbDate, status });
+      }
     });
 
     try {
       if (logsToUpload.length > 0) await supabase.from('attendance_logs').upsert(logsToUpload, { onConflict: 'employee_id, log_date' });
       if (logsToDelete.length > 0) await supabase.from('attendance_logs').delete().eq('employee_id', empId).in('log_date', logsToDelete);
-      if (typeof logHistory === 'function') logHistory(`Saved attendance for ${empName}`);
+      
+      if (typeof logHistory === 'function') logHistory(`Updated attendance for ${empName}`);
       await fetchLogs(); 
     } catch (error) { console.error(error); } finally { setIsSaving(false); }
   };
@@ -73,9 +77,17 @@ export default function DailyAttendance({ employees, logHistory }) {
     const todayDBStr = getDBDateStr(new Date());
     let totalPresent = 0, totalHoliday = 0, totalAbsent = 0;
 
+    // --- BUG FIX: IGNORE FUTURE DATES IN THE COUNTER ---
     cutoffDays.forEach(d => {
-      const dbDate = getDBDateStr(d); const isFuture = dbDate > todayDBStr; const status = attendanceData[`${emp.id}-${dbDate}`];
-      if (status === 'present') totalPresent++; else if (status === 'holiday') totalHoliday++; else if (status === 'absent' || (!status && !isFuture)) totalAbsent++;
+      const dbDate = getDBDateStr(d); 
+      const isFuture = dbDate > todayDBStr; 
+      const status = attendanceData[`${emp.id}-${dbDate}`];
+      
+      if (isFuture) return; // Completely ignore the ghost record on the 14th
+
+      if (status === 'present') totalPresent++; 
+      else if (status === 'holiday') totalHoliday++; 
+      else if (status === 'absent' || !status) totalAbsent++;
     });
 
     const handleToggle = (dbDate, currentStatus) => {
@@ -125,7 +137,6 @@ export default function DailyAttendance({ employees, logHistory }) {
 
   return (
     <div>
-      {/* SCREEN UI - Hides when printing */}
       <div className="space-y-8 animate-in fade-in duration-500 print:hidden">
         <div className="flex flex-col md:flex-row justify-between items-end gap-6">
           <div>
@@ -141,7 +152,6 @@ export default function DailyAttendance({ employees, logHistory }) {
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
               <input type="text" placeholder="Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm font-bold outline-none" />
             </div>
-            {/* PRINT BUTTON */}
             <button onClick={() => window.print()} className="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl">
               <Printer size={16}/> Print Report
             </button>
@@ -213,7 +223,7 @@ export default function DailyAttendance({ employees, logHistory }) {
                 const isFuture = dbDate > todayDBStr;
                 const status = attendanceData[`${emp.id}-${dbDate}`];
                 
-                if (isFuture) return; // Don't list future un-happened dates on paper
+                if (isFuture) return; 
 
                 let markStr = '';
                 if (status === 'present') { p++; markStr = 'P'; }
