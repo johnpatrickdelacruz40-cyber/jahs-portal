@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { 
   Users, CheckCircle2, XCircle, Clock, 
-  Activity, Video, Radio, PieChart 
+  Activity, Video, Radio, PieChart, X, User, Printer, Coffee 
 } from 'lucide-react';
 
 const getDBDateStr = (dateObj) => {
@@ -14,16 +14,16 @@ const getDBDateStr = (dateObj) => {
 
 export default function Dashboard({ employees }) {
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [todayStats, setTodayStats] = useState({ present: 0, absent: 0 });
+  const [todayStats, setTodayStats] = useState({ present: 0, leave: 0, absent: 0 });
+  const [detailedStats, setDetailedStats] = useState({ present: [], leave: [], absent: [] });
+  const [activeList, setActiveList] = useState(null); 
   const [isLoading, setIsLoading] = useState(true);
 
-  // Live clock
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // Fetch Today's Attendance
   useEffect(() => {
     const fetchTodayAttendance = async () => {
       setIsLoading(true);
@@ -31,21 +31,35 @@ export default function Dashboard({ employees }) {
       
       const { data, error } = await supabase
         .from('attendance_logs')
-        .select('status')
+        .select('employee_id, status')
         .eq('log_date', todayStr);
 
       if (!error && data) {
-        let p = 0, a = 0;
+        const presentArr = [];
+        const leaveArr = [];
+        const absentArr = [];
+        const markedIds = new Set();
+
         data.forEach(log => {
-          if (log.status === 'present') p++;
-          // Count 'absent' and 'leave' both as non-present for the main overview
-          if (log.status === 'absent' || log.status === 'leave') a++; 
+          markedIds.add(log.employee_id);
+          const emp = employees.find(e => e.id === log.employee_id);
+          if (emp) {
+            if (log.status === 'present') presentArr.push(emp);
+            else if (log.status === 'leave') leaveArr.push(emp);
+            else if (log.status === 'absent') absentArr.push(emp);
+          }
         });
-        
-        const totalMarked = p + a;
-        const unmarked = employees.length - totalMarked;
-        
-        setTodayStats({ present: p, absent: a + unmarked });
+
+        // Anyone unmarked defaults to No Work (Absent)
+        employees.forEach(emp => {
+          if (!markedIds.has(emp.id)) absentArr.push(emp);
+        });
+
+        // Sorting
+        [presentArr, leaveArr, absentArr].forEach(arr => arr.sort((a, b) => a.name.localeCompare(b.name)));
+
+        setDetailedStats({ present: presentArr, leave: leaveArr, absent: absentArr });
+        setTodayStats({ present: presentArr.length, leave: leaveArr.length, absent: absentArr.length });
       }
       setIsLoading(false);
     };
@@ -54,186 +68,168 @@ export default function Dashboard({ employees }) {
     else setIsLoading(false);
   }, [employees]);
 
-  const hour = currentTime.getHours();
-  const greeting = hour < 12 ? 'Good Morning' : hour < 18 ? 'Good Afternoon' : 'Good Evening';
-
-  // Chart Calculations
+  const greeting = currentTime.getHours() < 12 ? 'Good Morning' : currentTime.getHours() < 18 ? 'Good Afternoon' : 'Good Evening';
   const total = employees.length;
-  const pctPresent = total > 0 ? Math.round((todayStats.present / total) * 100) : 0;
-  const pctAbsent = total > 0 ? Math.round((todayStats.absent / total) * 100) : 0;
+
+  // Chart Percentages
+  const pctPresent = total > 0 ? (todayStats.present / total) * 100 : 0;
+  const pctLeave = total > 0 ? (todayStats.leave / total) * 100 : 0;
+  const pctAbsent = total > 0 ? (todayStats.absent / total) * 100 : 0;
+
+  // Calculate Gradient Stops
+  const stop1 = pctPresent;
+  const stop2 = pctPresent + pctLeave;
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-700 pb-10 flex flex-col min-h-full">
+    <div className="space-y-8 animate-in fade-in duration-700 pb-10 flex flex-col min-h-full relative">
       
-      {/* --- CLEAN HEADER --- */}
-      <div className="w-full bg-indigo-600 rounded-[3rem] p-10 text-white shadow-xl shadow-indigo-200 flex flex-col md:flex-row justify-between items-start md:items-end gap-6 relative overflow-hidden">
-        <div className="absolute top-0 right-1/4 p-10 opacity-5 pointer-events-none">
-           <Activity size={300} />
-        </div>
-        
-        <div className="relative z-10">
-          <p className="text-indigo-200 font-bold uppercase tracking-widest text-xs mb-2 flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> System Online
-          </p>
-          <h1 className="text-4xl md:text-5xl font-black tracking-tighter">
-            {greeting}.
-          </h1>
-          <p className="text-indigo-100 mt-2 font-medium max-w-md">
-            JAHS Electronic and Electrical Service
-          </p>
-        </div>
-        
-        <div className="relative z-10 text-left md:text-right bg-white/10 p-6 rounded-3xl backdrop-blur-sm border border-white/20">
-          <p className="text-3xl font-black tracking-tighter flex items-center gap-3">
-            <Clock size={24} className="text-indigo-300" />
-            {currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-          </p>
-          <p className="text-xs font-bold uppercase tracking-widest text-indigo-200 mt-1">
-            {currentTime.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-          </p>
-        </div>
-      </div>
-
-      {/* --- KPI METRIC CARDS --- */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex items-center gap-6 hover:shadow-md transition-shadow">
-          <div className="w-16 h-16 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400"><Users size={32} /></div>
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Personnel</p>
-            <h3 className="text-4xl font-black text-slate-900 leading-none mt-1">{total}</h3>
+      {/* Header */}
+      <div className={activeList ? "print:hidden" : ""}>
+        <div className="w-full bg-indigo-600 rounded-[3rem] p-10 text-white shadow-xl shadow-indigo-200 flex flex-col md:flex-row justify-between items-start md:items-end gap-6 relative overflow-hidden">
+          <div className="absolute top-0 right-1/4 p-10 opacity-5 pointer-events-none"><Activity size={300} /></div>
+          <div className="relative z-10">
+            <p className="text-indigo-200 font-bold uppercase tracking-widest text-xs mb-2 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> System Online
+            </p>
+            <h1 className="text-4xl md:text-5xl font-black tracking-tighter">{greeting}.</h1>
+            <p className="text-indigo-100 mt-2 font-medium max-w-md">JAHS Electronic and Electrical Service</p>
+          </div>
+          <div className="relative z-10 text-left md:text-right bg-white/10 p-6 rounded-3xl backdrop-blur-sm border border-white/20">
+            <p className="text-3xl font-black tracking-tighter flex items-center gap-3">
+              <Clock size={24} className="text-indigo-300" />
+              {currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+            </p>
+            <p className="text-xs font-bold uppercase tracking-widest text-indigo-200 mt-1">
+              {currentTime.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+            </p>
           </div>
         </div>
 
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex items-center gap-6 hover:shadow-md transition-shadow">
-          <div className="w-16 h-16 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-500"><CheckCircle2 size={32} /></div>
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Present Today</p>
-            <h3 className="text-4xl font-black text-slate-900 leading-none mt-1">{isLoading ? '...' : todayStats.present}</h3>
+        {/* KPI Cards - Now includes Leave */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mt-8">
+          <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400"><Users size={24} /></div>
+            <div><p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Total Personnel</p><h3 className="text-2xl font-black text-slate-900 leading-none mt-1">{total}</h3></div>
+          </div>
+          <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-500"><CheckCircle2 size={24} /></div>
+            <div><p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Present</p><h3 className="text-2xl font-black text-slate-900 leading-none mt-1">{isLoading ? '...' : todayStats.present}</h3></div>
+          </div>
+          <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center text-amber-500"><Coffee size={24} /></div>
+            <div><p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Leave</p><h3 className="text-2xl font-black text-slate-900 leading-none mt-1">{isLoading ? '...' : todayStats.leave}</h3></div>
+          </div>
+          <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-rose-50 flex items-center justify-center text-rose-500"><XCircle size={24} /></div>
+            <div><p className="text-[9px] font-black uppercase tracking-widest text-slate-400">No Work</p><h3 className="text-2xl font-black text-slate-900 leading-none mt-1">{isLoading ? '...' : todayStats.absent}</h3></div>
           </div>
         </div>
 
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex items-center gap-6 hover:shadow-md transition-shadow">
-          <div className="w-16 h-16 rounded-2xl bg-rose-50 flex items-center justify-center text-rose-500"><XCircle size={32} /></div>
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Absent / Unmarked</p>
-            <h3 className="text-4xl font-black text-slate-900 leading-none mt-1">{isLoading ? '...' : todayStats.absent}</h3>
-          </div>
-        </div>
-      </div>
-
-      {/* --- BOTTOM SECTION --- */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6 flex-1">
-        
-        {/* --- NEW PIE CHART (DOUGHNUT) WIDGET --- */}
-        <div className="lg:col-span-2 bg-white rounded-[3rem] border border-slate-100 shadow-sm p-10 flex flex-col justify-between">
-          <div className="flex justify-between items-start mb-8">
-            <div>
-              <h3 className="text-xl font-black tracking-tight text-slate-900 uppercase flex items-center gap-2">
-                <PieChart size={20} className="text-indigo-600" /> Daily Overview
-              </h3>
-              <p className="text-xs font-bold text-slate-400 mt-1">Real-time attendance distribution.</p>
-            </div>
-            <div className="px-4 py-2 bg-slate-50 border border-slate-100 rounded-xl">
-              <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600">Today</p>
-            </div>
-          </div>
-
-          <div className="flex-1 flex flex-col md:flex-row items-center justify-center gap-12 py-6">
-            
-            {/* Pure CSS Doughnut Chart using conic-gradient */}
-            <div 
-              className="w-52 h-52 rounded-full flex items-center justify-center shadow-lg transition-all duration-1000 ease-out"
-              style={{
-                background: `conic-gradient(#10b981 ${pctPresent}%, #f43f5e ${pctPresent}% 100%)`
-              }}
-            >
-              {/* Inner White Circle (Creates the "Doughnut" Hole) */}
-              <div className="w-36 h-36 bg-white rounded-full flex flex-col items-center justify-center shadow-inner">
-                <span className="text-4xl font-black text-slate-900 leading-none">{total}</span>
-                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">Total</span>
-              </div>
+        {/* Main Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-8 flex-1">
+          <div className="lg:col-span-2 bg-white rounded-[3rem] border border-slate-100 shadow-sm p-10 flex flex-col justify-between">
+            <div className="flex justify-between items-start mb-8">
+              <div><h3 className="text-xl font-black tracking-tight text-slate-900 uppercase flex items-center gap-2"><PieChart size={20} className="text-indigo-600" /> Daily Overview</h3><p className="text-xs font-bold text-slate-400 mt-1">Real-time attendance distribution.</p></div>
+              <div className="px-4 py-2 bg-slate-50 border border-slate-100 rounded-xl"><p className="text-[10px] font-black uppercase tracking-widest text-indigo-600">Today</p></div>
             </div>
 
-            {/* Chart Legend */}
-            <div className="flex flex-col gap-6 w-full md:w-auto">
-              <div className="flex items-center gap-4 bg-emerald-50 p-4 rounded-2xl border border-emerald-100">
-                <div className="w-4 h-4 rounded-full bg-emerald-500 shadow-md shadow-emerald-200"></div>
-                <div>
-                  <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest leading-none">Present</p>
-                  <p className="text-2xl font-black text-slate-900 mt-1">
-                    {todayStats.present} <span className="text-sm font-bold text-slate-400 ml-1">({pctPresent}%)</span>
-                  </p>
+            <div className="flex-1 flex flex-col md:flex-row items-center justify-center gap-12 py-6">
+              {/* Doughnut Chart with 3 segments */}
+              <div 
+                className="w-56 h-52 rounded-full flex items-center justify-center shadow-lg" 
+                style={{ background: `conic-gradient(#10b981 0% ${stop1}%, #f59e0b ${stop1}% ${stop2}%, #f43f5e ${stop2}% 100%)` }}
+              >
+                <div className="w-36 h-36 bg-white rounded-full flex flex-col items-center justify-center shadow-inner">
+                  <span className="text-4xl font-black text-slate-900 leading-none">{total}</span>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">Personnel</span>
                 </div>
               </div>
 
-              <div className="flex items-center gap-4 bg-rose-50 p-4 rounded-2xl border border-rose-100">
-                <div className="w-4 h-4 rounded-full bg-rose-500 shadow-md shadow-rose-200"></div>
-                <div>
-                  <p className="text-[10px] font-bold text-rose-600 uppercase tracking-widest leading-none">Absent / No Work</p>
-                  <p className="text-2xl font-black text-slate-900 mt-1">
-                    {todayStats.absent} <span className="text-sm font-bold text-slate-400 ml-1">({pctAbsent}%)</span>
-                  </p>
+              {/* Legend with View Buttons */}
+              <div className="flex flex-col gap-3 w-full md:w-auto min-w-[280px]">
+                {/* Present */}
+                <div className="flex items-center justify-between gap-6 bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100 hover:shadow-sm transition-all">
+                  <div className="flex items-center gap-3"><div className="w-3 h-3 rounded-full bg-emerald-500"></div><div><p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest leading-none">Present</p><p className="text-xl font-black text-slate-900 mt-1">{todayStats.present} <span className="text-[10px] font-bold text-slate-400 ml-1">({Math.round(pctPresent)}%)</span></p></div></div>
+                  <button onClick={() => setActiveList('present')} className="px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-lg text-[9px] font-black uppercase tracking-widest">View</button>
+                </div>
+                {/* Leave */}
+                <div className="flex items-center justify-between gap-6 bg-amber-50/50 p-4 rounded-2xl border border-amber-100 hover:shadow-sm transition-all">
+                  <div className="flex items-center gap-3"><div className="w-3 h-3 rounded-full bg-amber-500"></div><div><p className="text-[10px] font-bold text-amber-600 uppercase tracking-widest leading-none">Leave</p><p className="text-xl font-black text-slate-900 mt-1">{todayStats.leave} <span className="text-[10px] font-bold text-slate-400 ml-1">({Math.round(pctLeave)}%)</span></p></div></div>
+                  <button onClick={() => setActiveList('leave')} className="px-3 py-1.5 bg-amber-100 text-amber-700 rounded-lg text-[9px] font-black uppercase tracking-widest">View</button>
+                </div>
+                {/* No Work */}
+                <div className="flex items-center justify-between gap-6 bg-rose-50/50 p-4 rounded-2xl border border-rose-100 hover:shadow-sm transition-all">
+                  <div className="flex items-center gap-3"><div className="w-3 h-3 rounded-full bg-rose-500"></div><div><p className="text-[10px] font-bold text-rose-600 uppercase tracking-widest leading-none">No Work</p><p className="text-xl font-black text-slate-900 mt-1">{todayStats.absent} <span className="text-[10px] font-bold text-slate-400 ml-1">({Math.round(pctAbsent)}%)</span></p></div></div>
+                  <button onClick={() => setActiveList('absent')} className="px-3 py-1.5 bg-rose-100 text-rose-700 rounded-lg text-[9px] font-black uppercase tracking-widest">View</button>
                 </div>
               </div>
             </div>
-
-          </div>
-        </div>
-
-        {/* Video & Telemetry */}
-        <div className="flex flex-col gap-6">
-          <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-4 flex flex-col">
-            <div className="flex justify-between items-center mb-3 px-3">
-              <h3 className="text-xs font-black tracking-widest text-slate-900 uppercase flex items-center gap-2">
-                <Video size={16} className="text-rose-500" /> Live Feed
-              </h3>
-              <span className="flex h-2 w-2 relative">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
-              </span>
-            </div>
-            <div className="relative w-full h-36 rounded-[1.5rem] overflow-hidden bg-slate-900 border border-slate-800">
-              <video autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover opacity-80">
-                <source src="/bg-video.mp4" type="video/mp4" />
-              </video>
-            </div>
           </div>
 
-          <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-8 flex-1 flex flex-col">
-            <h3 className="text-lg font-black tracking-tight text-slate-900 uppercase flex items-center gap-2 mb-6">
-              <Radio size={18} className="text-indigo-500" /> System Activity
-            </h3>
-            <div className="flex-1 flex flex-col gap-5 relative">
-              <div className="absolute left-[9px] top-2 bottom-2 w-0.5 bg-slate-100 z-0"></div>
-              
-              <div className="flex gap-4 relative z-10">
-                <div className="w-5 h-5 rounded-full bg-emerald-100 border-4 border-white flex-shrink-0 flex items-center justify-center"><div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div></div>
-                <div><p className="text-xs font-bold text-slate-900 leading-none">Database Synced</p><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">Just now</p></div>
-              </div>
-
-              <div className="flex gap-4 relative z-10">
-                <div className="w-5 h-5 rounded-full bg-indigo-100 border-4 border-white flex-shrink-0 flex items-center justify-center"><div className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></div></div>
-                <div><p className="text-xs font-bold text-slate-900 leading-none">Admin Session Verified</p><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">12 mins ago</p></div>
-              </div>
-
-              <div className="flex gap-4 relative z-10">
-                <div className="w-5 h-5 rounded-full bg-slate-100 border-4 border-white flex-shrink-0 flex items-center justify-center"><div className="w-1.5 h-1.5 bg-slate-400 rounded-full"></div></div>
-                <div><p className="text-xs font-bold text-slate-900 leading-none">Cloud Backup Completed</p><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">03:00 AM</p></div>
+          {/* Widgets */}
+          <div className="flex flex-col gap-6">
+            <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-4 flex flex-col">
+              <div className="flex justify-between items-center mb-3 px-3"><h3 className="text-xs font-black tracking-widest text-slate-900 uppercase flex items-center gap-2"><Video size={16} className="text-rose-500" /> Live Feed</h3><span className="flex h-2 w-2 relative"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span></span></div>
+              <div className="relative w-full h-36 rounded-[1.5rem] overflow-hidden bg-slate-900 border border-slate-800"><video autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover opacity-80"><source src="/bg-video.mp4" type="video/mp4" /></video></div>
+            </div>
+            <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-8 flex-1 flex flex-col">
+              <h3 className="text-lg font-black tracking-tight text-slate-900 uppercase flex items-center gap-2 mb-6"><Radio size={18} className="text-indigo-500" /> System Activity</h3>
+              <div className="flex-1 flex flex-col gap-5 relative">
+                <div className="absolute left-[9px] top-2 bottom-2 w-0.5 bg-slate-100 z-0"></div>
+                <div className="flex gap-4 relative z-10"><div className="w-5 h-5 rounded-full bg-emerald-100 border-4 border-white flex-shrink-0 flex items-center justify-center"><div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div></div><div><p className="text-xs font-bold text-slate-900 leading-none">Database Synced</p><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">Just now</p></div></div>
+                <div className="flex gap-4 relative z-10"><div className="w-5 h-5 rounded-full bg-indigo-100 border-4 border-white flex-shrink-0 flex items-center justify-center"><div className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></div></div><div><p className="text-xs font-bold text-slate-900 leading-none">Admin Verified</p><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">Active Session</p></div></div>
+                <div className="flex gap-4 relative z-10"><div className="w-5 h-5 rounded-full bg-slate-100 border-4 border-white flex-shrink-0 flex items-center justify-center"><div className="w-1.5 h-1.5 bg-slate-400 rounded-full"></div></div><div><p className="text-xs font-bold text-slate-900 leading-none">Cloud Backup</p><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">Daily Sync OK</p></div></div>
               </div>
             </div>
           </div>
         </div>
+
+        {/* Footer */}
+        <div className="mt-8 pt-4 flex flex-col md:flex-row justify-between items-center text-slate-400 gap-4 px-4">
+           <p className="text-[10px] font-black uppercase tracking-[0.2em]">JAHS Electronic and Electrical Service</p>
+           <div className="text-[11px] font-bold tracking-wide text-center md:text-right border border-slate-200 bg-white px-6 py-3 rounded-full shadow-sm">System Engineered & Developed by <span className="text-indigo-600 font-black mx-1">John Patrick DC. Dela Cruz</span> <span className="opacity-40">| © 2026</span></div>
+        </div>
       </div>
 
-      {/* --- DEVELOPER FOOTER --- */}
-      <div className="mt-auto pt-4 flex flex-col md:flex-row justify-between items-center text-slate-400 gap-4 px-4">
-         <p className="text-[10px] font-black uppercase tracking-[0.2em]">
-           JAHS Electronic and Electrical Service
-         </p>
-         <div className="text-[11px] font-bold tracking-wide text-center md:text-right border border-slate-200 bg-white px-6 py-3 rounded-full shadow-sm">
-           System Engineered & Developed by <span className="text-indigo-600 font-black mx-1">John Patrick DC. Dela Cruz</span> <span className="opacity-40">| © 2026</span>
-         </div>
-      </div>
+      {/* Modal Overlay */}
+      {activeList && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200 print:bg-white print:p-0 print:block">
+          <div className="bg-white rounded-[2rem] w-full max-w-md shadow-2xl border border-slate-100 flex flex-col max-h-[80vh] animate-in zoom-in-95 duration-200 print:shadow-none print:border-none print:max-w-none print:h-auto print:max-h-none">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center print:border-black print:pb-4">
+               <div>
+                 <h3 className={`text-xl font-black uppercase tracking-tight print:text-black ${activeList === 'present' ? 'text-emerald-700' : activeList === 'leave' ? 'text-amber-700' : 'text-rose-700'}`}>
+                   {activeList === 'present' ? 'Present Today' : activeList === 'leave' ? 'On Official Leave' : 'No Work Today'}
+                 </h3>
+                 <p className="text-xs font-bold text-slate-400 mt-1 print:text-black">
+                   {currentTime.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} • {detailedStats[activeList].length} Personnel
+                 </p>
+               </div>
+               <div className="flex items-center gap-2 print:hidden">
+                 <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-colors"><Printer size={14}/> Print</button>
+                 <button onClick={() => setActiveList(null)} className="p-2 hover:bg-slate-100 text-slate-400 hover:text-slate-900 rounded-xl transition-colors"><X size={20} /></button>
+               </div>
+            </div>
+            <div className="p-4 overflow-y-auto flex flex-col gap-2 flex-1 print:overflow-visible print:p-0 print:mt-4">
+              {detailedStats[activeList].length === 0 ? (
+                 <div className="text-center py-10 text-slate-400 font-bold text-xs uppercase tracking-widest">No personnel found.</div>
+              ) : (
+                 detailedStats[activeList].map((emp, i) => (
+                   <div key={emp.id} className="flex items-center gap-4 p-3 hover:bg-slate-50 rounded-2xl border border-transparent hover:border-slate-100 print:border-b print:border-slate-300 print:rounded-none">
+                     <div className="w-10 h-10 rounded-xl bg-slate-100 overflow-hidden border border-slate-200 p-0.5 flex-shrink-0 print:hidden">
+                       {emp.photo ? <img src={emp.photo} className="w-full h-full object-cover rounded-lg" /> : <User className="m-auto h-full text-slate-300" size={16} />}
+                     </div>
+                     <span className="hidden print:block font-mono text-sm mr-2">{i + 1}.</span>
+                     <div className="overflow-hidden">
+                       <p className="font-bold text-slate-900 text-sm truncate print:text-base">{emp.name}</p>
+                       <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 print:text-black">{emp.idNo}</p>
+                     </div>
+                   </div>
+                 ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
