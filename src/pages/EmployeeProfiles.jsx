@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { Search, ChevronLeft, ChevronRight, User } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, User, ChevronDown, ChevronUp } from 'lucide-react';
 
 const getDBDateStr = (dateObj) => {
   const year = dateObj.getFullYear();
@@ -13,6 +13,20 @@ export default function EmployeeProfiles({ employees }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [viewDate, setViewDate] = useState(new Date());
   const [attendanceLogs, setAttendanceLogs] = useState({});
+  const [expandedId, setExpandedId] = useState(null); // Added UI State
+
+  // --- BUG FIX: Safe Date Navigation ---
+  const handlePrevCutoff = () => {
+    const d = new Date(viewDate);
+    d.setDate(d.getDate() - 15);
+    setViewDate(d);
+  };
+
+  const handleNextCutoff = () => {
+    const d = new Date(viewDate);
+    d.setDate(d.getDate() + 15);
+    setViewDate(d);
+  };
 
   const fetchLogs = async () => {
     const { data } = await supabase.from('attendance_logs').select('*');
@@ -47,9 +61,9 @@ export default function EmployeeProfiles({ employees }) {
          <div className="space-y-2">
             <h1 className="text-4xl font-black tracking-tighter uppercase text-slate-900">Personnel Hub</h1>
             <div className="flex items-center gap-3 bg-white border border-slate-200 p-2 rounded-2xl shadow-sm">
-               <button onClick={() => setViewDate(new Date(viewDate.setDate(viewDate.getDate() - 15)))} className="p-2 hover:bg-slate-50 rounded-xl transition-all"><ChevronLeft size={18}/></button>
+               <button onClick={handlePrevCutoff} className="p-2 hover:bg-slate-50 rounded-xl transition-all"><ChevronLeft size={18}/></button>
                <span className="text-[10px] font-black uppercase tracking-widest text-indigo-600 px-4">{currentCutoff.label}</span>
-               <button onClick={() => setViewDate(new Date(viewDate.setDate(viewDate.getDate() + 15)))} className="p-2 hover:bg-slate-50 rounded-xl transition-all"><ChevronRight size={18}/></button>
+               <button onClick={handleNextCutoff} className="p-2 hover:bg-slate-50 rounded-xl transition-all"><ChevronRight size={18}/></button>
             </div>
          </div>
          <div className="relative w-full md:w-80">
@@ -61,7 +75,7 @@ export default function EmployeeProfiles({ employees }) {
        <div className="grid grid-cols-1 gap-6">
           {employees.filter(e => e.name.toLowerCase().includes(searchTerm.toLowerCase())).map(emp => {
             const todayDBStr = getDBDateStr(new Date());
-            let present = 0, absent = 0;
+            let present = 0, absent = 0, holiday = 0;
 
             cutoffDays.forEach(d => {
               const dbDate = getDBDateStr(d);
@@ -69,49 +83,75 @@ export default function EmployeeProfiles({ employees }) {
               const status = attendanceLogs[`${emp.id}-${dbDate}`];
 
               if (status === 'present') present++;
+              else if (status === 'holiday') holiday++;
               else if (status === 'absent' || (!status && !isFuture)) absent++;
             });
 
             return (
-              <div key={emp.id} className="bg-white border border-slate-200 rounded-[3.5rem] p-10 shadow-sm flex flex-col xl:flex-row gap-12 hover:shadow-md transition-shadow">
-                 <div className="xl:w-64 flex flex-col items-center text-center">
-                    <div className="w-28 h-28 rounded-[2rem] border-4 border-slate-50 shadow-inner overflow-hidden mb-6">
-                       {emp.photo ? <img src={emp.photo} className="w-full h-full object-cover" /> : <User className="text-slate-200 m-auto h-full" size={40} />}
-                    </div>
-                    <h4 className="text-xl font-black text-slate-900 leading-tight">{emp.name}</h4>
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-2">{emp.idNo}</p>
-                    
-                    <div className="flex gap-4 mt-6 w-full">
-                       <div className="flex-1 bg-indigo-50 py-3 rounded-2xl text-indigo-600">
-                          <p className="text-2xl font-black">{present}</p>
-                          <p className="text-[8px] font-black uppercase tracking-widest">Present</p>
-                       </div>
-                       <div className="flex-1 bg-rose-50 py-3 rounded-2xl text-rose-500">
-                          <p className="text-2xl font-black">{absent}</p>
-                          <p className="text-[8px] font-black uppercase tracking-widest">Absent</p>
-                       </div>
-                    </div>
-                 </div>
+              <div key={emp.id} className="bg-white border border-slate-200 rounded-[2.5rem] shadow-sm overflow-hidden hover:shadow-md transition-shadow">
                  
-                 <div className="flex-1 grid grid-cols-5 sm:grid-cols-7 lg:grid-cols-10 gap-3">
-                    {cutoffDays.map((date, i) => {
-                      const dbDate = getDBDateStr(date);
-                      const isFuture = dbDate > todayDBStr;
-                      const status = attendanceLogs[`${emp.id}-${dbDate}`];
-                      
-                      let bgClass = 'bg-slate-50 text-slate-300 border border-slate-100 opacity-60'; // Unmarked / Future
-                      if (status === 'present') bgClass = 'bg-indigo-600 text-white shadow-lg shadow-indigo-100';
-                      if (status === 'holiday') bgClass = 'bg-amber-500 text-white shadow-lg shadow-amber-100';
-                      if (status === 'absent' || (!status && !isFuture)) bgClass = 'bg-rose-50 text-rose-500 border border-rose-100'; // Default past unmarked to red
-
-                      return (
-                        <div key={i} className={`aspect-square rounded-[1.5rem] flex flex-col items-center justify-center text-[10px] font-black transition-all ${bgClass}`}>
-                          <span className="text-xl tracking-tighter">{date.getDate()}</span>
-                          <span className="text-[7px] uppercase tracking-widest mt-1 opacity-80">{date.toLocaleString('default', { month: 'short' })}</span>
-                        </div>
-                      );
-                    })}
+                 {/* Clickable Header */}
+                 <div 
+                   onClick={() => setExpandedId(expandedId === emp.id ? null : emp.id)}
+                   className="p-8 flex items-center justify-between cursor-pointer hover:bg-slate-50/50 transition-colors"
+                 >
+                    <div className="flex items-center gap-6">
+                       <div className="w-20 h-20 rounded-[1.5rem] border-4 border-slate-50 shadow-sm overflow-hidden bg-white p-1">
+                          {emp.photo ? <img src={emp.photo} className="w-full h-full object-cover rounded-xl" /> : <User className="text-slate-200 m-auto h-full" size={32} />}
+                       </div>
+                       <div>
+                          <h4 className="text-2xl font-black text-slate-900 leading-tight tracking-tight">{emp.name}</h4>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">{emp.idNo}</p>
+                       </div>
+                    </div>
+                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${expandedId === emp.id ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-50 text-slate-400 border border-slate-100'}`}>
+                       {expandedId === emp.id ? <ChevronUp size={24} /> : <ChevronDown size={24} />}
+                    </div>
                  </div>
+
+                 {/* Collapsible Content */}
+                 {expandedId === emp.id && (
+                   <div className="p-8 border-t border-slate-100 bg-slate-50/30 animate-in slide-in-from-top-2">
+                      <div className="flex flex-col xl:flex-row gap-12">
+                        {/* Summary Badges */}
+                        <div className="flex gap-4 xl:w-64">
+                           <div className="flex-1 bg-indigo-50 py-4 rounded-2xl text-indigo-600 text-center border border-indigo-100/50">
+                              <p className="text-3xl font-black">{present}</p>
+                              <p className="text-[8px] font-black uppercase tracking-widest mt-1">Present</p>
+                           </div>
+                           <div className="flex-1 bg-amber-50 py-4 rounded-2xl text-amber-500 text-center border border-amber-100/50">
+                              <p className="text-3xl font-black">{holiday}</p>
+                              <p className="text-[8px] font-black uppercase tracking-widest mt-1">Holiday</p>
+                           </div>
+                           <div className="flex-1 bg-rose-50 py-4 rounded-2xl text-rose-500 text-center border border-rose-100/50">
+                              <p className="text-3xl font-black">{absent}</p>
+                              <p className="text-[8px] font-black uppercase tracking-widest mt-1">Absent</p>
+                           </div>
+                        </div>
+                        
+                        {/* Calendar Grid */}
+                        <div className="flex-1 grid grid-cols-5 sm:grid-cols-7 lg:grid-cols-10 gap-3">
+                           {cutoffDays.map((date, i) => {
+                             const dbDate = getDBDateStr(date);
+                             const isFuture = dbDate > todayDBStr;
+                             const status = attendanceLogs[`${emp.id}-${dbDate}`];
+                             
+                             let bgClass = 'bg-white text-slate-300 border-2 border-slate-100 opacity-60'; // Unmarked / Future
+                             if (status === 'present') bgClass = 'bg-indigo-600 text-white shadow-lg shadow-indigo-100 border-2 border-indigo-600';
+                             if (status === 'holiday') bgClass = 'bg-amber-500 text-white shadow-lg shadow-amber-100 border-2 border-amber-500';
+                             if (status === 'absent' || (!status && !isFuture)) bgClass = 'bg-rose-50 text-rose-500 border-2 border-rose-100'; // Default past unmarked to red
+
+                             return (
+                               <div key={i} className={`aspect-square rounded-[1.5rem] flex flex-col items-center justify-center text-[10px] font-black transition-all ${bgClass}`}>
+                                 <span className="text-xl tracking-tighter">{date.getDate()}</span>
+                                 <span className="text-[7px] uppercase tracking-widest mt-1 opacity-80">{date.toLocaleString('default', { month: 'short' })}</span>
+                               </div>
+                             );
+                           })}
+                        </div>
+                      </div>
+                   </div>
+                 )}
               </div>
             )
           })}

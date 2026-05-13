@@ -16,6 +16,19 @@ export default function DailyAttendance({ employees, logHistory }) {
   const [isSaving, setIsSaving] = useState(false);
   const [viewDate, setViewDate] = useState(new Date());
 
+  // --- BUG FIX: Safe Date Navigation ---
+  const handlePrevCutoff = () => {
+    const d = new Date(viewDate);
+    d.setDate(d.getDate() - 15);
+    setViewDate(d);
+  };
+
+  const handleNextCutoff = () => {
+    const d = new Date(viewDate);
+    d.setDate(d.getDate() + 15);
+    setViewDate(d);
+  };
+
   const getCutoffRange = (baseDate) => {
     const year = baseDate.getFullYear();
     const month = baseDate.getMonth();
@@ -48,16 +61,12 @@ export default function DailyAttendance({ employees, logHistory }) {
     setIsSaving(true);
     const todayDBStr = getDBDateStr(new Date());
     
-    // Only save data if it's explicitly marked OR if it's a past/present day (default to absent)
     const logsToUpload = cutoffDays.reduce((acc, date) => {
       const dbDate = getDBDateStr(date);
       const isFuture = dbDate > todayDBStr;
       let status = attendanceData[`${empId}-${dbDate}`];
 
-      // If it's unmarked and NOT in the future, it defaults to absent
       if (!status && !isFuture) status = 'absent';
-
-      // If there's a status (not null from future unmarks), queue it for save
       if (status) acc.push({ employee_id: empId, log_date: dbDate, status });
       
       return acc;
@@ -69,8 +78,6 @@ export default function DailyAttendance({ employees, logHistory }) {
       if (typeof logHistory === 'function') logHistory(`Saved attendance for ${empName}`);
       alert("Attendance Saved Successfully");
       await fetchLogs(); 
-    } else {
-      alert("Error saving: " + error.message);
     }
     setIsSaving(false);
   };
@@ -79,7 +86,6 @@ export default function DailyAttendance({ employees, logHistory }) {
     const todayDBStr = getDBDateStr(new Date());
     let totalPresent = 0, totalHoliday = 0, totalAbsent = 0;
 
-    // Accurate Counting Logic
     cutoffDays.forEach(d => {
       const dbDate = getDBDateStr(d);
       const isFuture = dbDate > todayDBStr;
@@ -88,14 +94,14 @@ export default function DailyAttendance({ employees, logHistory }) {
       if (status === 'present') totalPresent++;
       else if (status === 'holiday') totalHoliday++;
       else if (status === 'absent') totalAbsent++;
-      else if (!status && !isFuture) totalAbsent++; // Count unmarked past days as absent
+      else if (!status && !isFuture) totalAbsent++;
     });
 
     const handleToggle = (dbDate, currentStatus) => {
       let nextStatus = 'present';
       if (currentStatus === 'present') nextStatus = 'holiday';
       else if (currentStatus === 'holiday') nextStatus = 'absent';
-      else if (currentStatus === 'absent') nextStatus = null; // Clears the mark entirely
+      else if (currentStatus === 'absent') nextStatus = null; 
       
       setAttendanceData(prev => ({...prev, [`${emp.id}-${dbDate}`]: nextStatus}));
     };
@@ -129,10 +135,10 @@ export default function DailyAttendance({ employees, logHistory }) {
             const isFuture = dbDate > todayDBStr;
             const isToday = dbDate === todayDBStr;
 
-            let bgClass = 'bg-white border-slate-200 text-slate-400 hover:border-indigo-200'; // Unmarked
+            let bgClass = 'bg-white border-slate-200 text-slate-400 hover:border-indigo-200';
             if (status === 'present') bgClass = 'bg-indigo-600 border-indigo-600 text-white shadow-lg';
             if (status === 'holiday') bgClass = 'bg-amber-500 border-amber-500 text-white shadow-lg';
-            if (status === 'absent' || (!status && !isFuture)) bgClass = 'bg-rose-50 border-rose-100 text-rose-500'; // Explicit or defaulted absent
+            if (status === 'absent' || (!status && !isFuture)) bgClass = 'bg-rose-50 border-rose-100 text-rose-500';
 
             return (
               <div key={i} onClick={() => handleToggle(dbDate, status || (!isFuture ? 'absent' : null))} className={`relative p-4 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all cursor-pointer group ${bgClass} ${isToday ? 'ring-4 ring-indigo-500/20 scale-[1.02] z-10' : ''}`}>
@@ -149,14 +155,14 @@ export default function DailyAttendance({ employees, logHistory }) {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex flex-col md:flex-row justify-between items-end gap-6">
         <div>
           <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase">Attendance Manager</h1>
           <div className="flex items-center gap-4 mt-2">
-            <button onClick={() => setViewDate(new Date(viewDate.setDate(viewDate.getDate() - 15)))} className="p-2 hover:bg-slate-100 rounded-lg"><ChevronLeft size={20}/></button>
+            <button onClick={handlePrevCutoff} className="p-2 hover:bg-slate-100 rounded-lg transition-all"><ChevronLeft size={20}/></button>
             <p className="font-bold text-indigo-600 uppercase text-xs tracking-widest bg-indigo-50 px-4 py-2 rounded-full">{currentCutoff.label}</p>
-            <button onClick={() => setViewDate(new Date(viewDate.setDate(viewDate.getDate() + 15)))} className="p-2 hover:bg-slate-100 rounded-lg"><ChevronRight size={20}/></button>
+            <button onClick={handleNextCutoff} className="p-2 hover:bg-slate-100 rounded-lg transition-all"><ChevronRight size={20}/></button>
           </div>
         </div>
         <div className="relative w-full md:w-80">
