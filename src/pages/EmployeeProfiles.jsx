@@ -116,8 +116,7 @@ export default function EmployeeProfiles({ employees }) {
                               <div className="w-20 h-20 flex items-center justify-center border border-black p-1"><img src="/logo.png" className="w-full h-full object-contain grayscale" alt="Logo" onError={(e) => e.target.src='https://via.placeholder.com/80?text=LOGO'} /></div>
                               <div>
                                 <h1 className="text-4xl font-black tracking-[0.2em] leading-none text-gray-800">JAHS</h1>
-                                <h1 className="text-4xl font-black tracking-[0.2em] leading-none text-gray-400 mt-[-5px]">TELECOM</h1>
-                                <p className="font-bold tracking-[0.3em] text-[10px] uppercase mt-2">Telecom Service Provider</p>
+                                <p className="font-bold tracking-[0.3em] text-[10px] uppercase mt-2">Electronics & Electrical Services</p>
                                 <p className="text-xs leading-tight text-gray-800 mt-1">#424 Brgy Balubad, Bulacan, Bulacan<br/>Tel: 792-0595</p>
                               </div>
                             </div>
@@ -209,8 +208,7 @@ export default function EmployeeProfiles({ employees }) {
                   </div>
                   <div>
                     <h1 className="text-4xl font-black tracking-[0.2em] leading-none text-gray-800">JAHS</h1>
-                    <h1 className="text-4xl font-black tracking-[0.2em] leading-none text-gray-400 mt-[-5px]">TELECOM</h1>
-                    <p className="font-bold tracking-[0.3em] text-[10px] uppercase mt-2">Telecom Service Provider</p>
+                    <p className="font-bold tracking-[0.3em] text-[10px] uppercase mt-2">Electronics & Electrical Services</p>
                     <p className="text-[10px] leading-tight text-gray-800 mt-1">#424 Brgy Balubad, Bulacan, Bulacan<br/>Tel: 792-0595</p>
                   </div>
                 </div>
