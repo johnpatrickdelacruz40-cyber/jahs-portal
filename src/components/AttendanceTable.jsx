@@ -24,7 +24,7 @@ export default function AttendanceTable({ attendanceLogs = [] }) {
           />
         </div>
       </div>
-
+      
       <div className="overflow-x-auto flex-1">
         <table className="w-full text-sm text-left text-slate-600 min-w-[600px]">
           <thead className="text-[10px] text-slate-400 uppercase font-bold bg-slate-50/50 border-b border-slate-200">
