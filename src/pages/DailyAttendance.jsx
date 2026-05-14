@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { Search, ChevronDown, ChevronUp, User, Save, ChevronLeft, ChevronRight, Lock, Printer, Edit3 } from 'lucide-react';
+import { Search, ChevronDown, ChevronUp, User, Save, ChevronLeft, ChevronRight, Printer, Edit3 } from 'lucide-react';
 
 const getDBDateStr = (dateObj) => {
   const year = dateObj.getFullYear();
@@ -15,7 +15,6 @@ export default function DailyAttendance({ employees, logHistory }) {
   const [attendanceData, setAttendanceData] = useState({});
   const [isSaving, setIsSaving] = useState(false);
   const [viewDate, setViewDate] = useState(new Date());
-  
   const [printMode, setPrintMode] = useState(null); 
 
   useEffect(() => {
@@ -61,13 +60,20 @@ export default function DailyAttendance({ employees, logHistory }) {
     const todayDBStr = getDBDateStr(new Date());
     const logsToUpload = []; const logsToDelete = []; 
 
+    // NEW LOGIC: Correctly handles advance future dates
     cutoffDays.forEach(date => {
       const dbDate = getDBDateStr(date);
       const isFuture = dbDate > todayDBStr;
       let status = attendanceData[`${empId}-${dbDate}`];
-      if (isFuture) logsToDelete.push(dbDate);
-      else {
-        if (!status) status = 'absent'; 
+      
+      if (!status) {
+        if (isFuture) {
+           logsToDelete.push(dbDate); // If future and blank, delete from DB
+        } else {
+           status = 'absent'; // If past/present and blank, default to absent
+           logsToUpload.push({ employee_id: empId, log_date: dbDate, status });
+        }
+      } else {
         logsToUpload.push({ employee_id: empId, log_date: dbDate, status });
       }
     });
@@ -82,7 +88,6 @@ export default function DailyAttendance({ employees, logHistory }) {
 
   return (
     <div className="h-full">
-      
       <div className={`space-y-8 animate-in fade-in duration-500 ${printMode === 'matrix' ? 'hidden' : 'block'}`}>
         
         <div className={`flex-col md:flex-row justify-between items-end gap-6 ${printMode === 'dtr' ? 'hidden' : 'flex'}`}>
@@ -112,22 +117,23 @@ export default function DailyAttendance({ employees, logHistory }) {
               {employees.filter(e => e.name.toLowerCase().includes(searchTerm.toLowerCase())).map((emp) => {
                 
                 const isExpanded = expandedId === emp.id;
-                
                 if (printMode === 'dtr' && !isExpanded) return null;
 
                 const todayDBStr = getDBDateStr(new Date());
                 let totalPresent = 0, totalLeave = 0, totalNoWork = 0;
+                
                 cutoffDays.forEach(d => {
                   const dbDate = getDBDateStr(d); 
-                  const isFuture = dbDate > todayDBStr; 
                   const status = attendanceData[`${emp.id}-${dbDate}`];
-                  if (!isFuture) {
-                    if (status === 'present') totalPresent++; 
-                    else if (status === 'leave') totalLeave++; 
-                    else if (status === 'absent' || !status) totalNoWork++;
-                  }
+                  // Count stats regardless of if it's future or not so you can see advanced leaves in the totals
+                  if (status === 'present') totalPresent++; 
+                  else if (status === 'leave') totalLeave++; 
+                  else if (status === 'absent') totalNoWork++;
+                  // Only count unmarked past/present days as No Work
+                  else if (!status && dbDate <= todayDBStr) totalNoWork++;
                 });
 
+                // --- THE LOOPING CLICK TOGGLE ---
                 const handleToggle = (dbDate, currentStatus) => {
                   let nextStatus = 'present'; 
                   if (currentStatus === 'present') nextStatus = 'leave'; 
@@ -138,22 +144,12 @@ export default function DailyAttendance({ employees, logHistory }) {
 
                 return (
                   <React.Fragment key={emp.id}>
-                    
                     <tr className={`group transition-colors ${isExpanded ? 'bg-indigo-50/40' : 'hover:bg-slate-50/50 cursor-pointer'} ${printMode === 'dtr' ? 'hidden' : ''}`} onClick={() => setExpandedId(isExpanded ? null : emp.id)}>
                       <td className="px-12 py-6 flex items-center gap-6">
-                        <div className="w-16 h-16 rounded-[1.5rem] border-2 bg-white overflow-hidden p-1 shadow-sm">
-                          {emp.photo ? <img src={emp.photo} className="w-full h-full object-cover rounded-xl" alt="" /> : <User className="text-slate-200 m-auto" size={32} />}
-                        </div>
-                        <div>
-                          <p className="font-black text-slate-900 text-xl tracking-tight leading-tight">{emp.name}</p>
-                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">{emp.idNo}</p>
-                        </div>
+                        <div className="w-16 h-16 rounded-[1.5rem] border-2 bg-white overflow-hidden p-1 shadow-sm"><img src={emp.photo || 'https://via.placeholder.com/60'} className="w-full h-full object-cover rounded-xl" alt="" /></div>
+                        <div><p className="font-black text-slate-900 text-xl tracking-tight leading-tight">{emp.name}</p><p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">{emp.idNo}</p></div>
                       </td>
-                      <td className="px-12 py-6 text-right">
-                        <div className={`inline-flex items-center justify-center w-12 h-12 rounded-2xl transition-all ${isExpanded ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-50 text-slate-400'}`}>
-                          {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-                        </div>
-                      </td>
+                      <td className="px-12 py-6 text-right"><div className={`inline-flex items-center justify-center w-12 h-12 rounded-2xl transition-all ${isExpanded ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-50 text-slate-400'}`}>{isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}</div></td>
                     </tr>
 
                     {isExpanded && (
@@ -161,7 +157,7 @@ export default function DailyAttendance({ employees, logHistory }) {
                         <td colSpan="2" className="p-0 border-none">
                           <div className="bg-slate-50 animate-in slide-in-from-top-2 border-t border-slate-100">
                             
-                            {/* ADMIN DATABASE CONTROLS */}
+                            {/* ADMIN CONTROLS */}
                             <div className={`p-10 border-b border-slate-200 ${printMode === 'dtr' ? 'hidden' : 'block'}`}>
                               <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-8">
                                 <div className="flex gap-4">
@@ -175,19 +171,21 @@ export default function DailyAttendance({ employees, logHistory }) {
                               </div>
                               <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-7 xl:grid-cols-8 gap-3">
                                 {cutoffDays.map((date, i) => {
-                                  const dbDate = getDBDateStr(date); const status = attendanceData[`${emp.id}-${dbDate}`]; const isFuture = dbDate > todayDBStr; const isToday = dbDate === todayDBStr;
+                                  const dbDate = getDBDateStr(date); 
+                                  const status = attendanceData[`${emp.id}-${dbDate}`]; 
+                                  const isFuture = dbDate > todayDBStr; 
+                                  const isToday = dbDate === todayDBStr;
+                                  
                                   let bgClass = '';
-                                  if (isFuture) bgClass = 'bg-slate-100 border-slate-200 text-slate-300 opacity-60 cursor-not-allowed';
-                                  else {
-                                    bgClass = 'bg-white border-slate-200 text-slate-400 hover:border-indigo-200 cursor-pointer'; 
-                                    if (status === 'present') bgClass = 'bg-indigo-600 border-indigo-600 text-white shadow-lg cursor-pointer';
-                                    if (status === 'leave') bgClass = 'bg-amber-500 border-amber-500 text-white shadow-lg cursor-pointer';
-                                    if (status === 'absent' || (!status && !isFuture)) bgClass = 'bg-rose-50 border-rose-100 text-rose-500 cursor-pointer'; 
-                                  }
+                                  if (status === 'present') bgClass = 'bg-indigo-600 border-indigo-600 text-white shadow-lg cursor-pointer';
+                                  else if (status === 'leave') bgClass = 'bg-amber-500 border-amber-500 text-white shadow-lg cursor-pointer';
+                                  else if (status === 'absent') bgClass = 'bg-rose-50 border-rose-100 text-rose-500 cursor-pointer';
+                                  else if (!status && !isFuture) bgClass = 'bg-rose-50 border-rose-100 text-rose-500 cursor-pointer'; 
+                                  else bgClass = 'bg-slate-50 border-slate-200 border-dashed text-slate-400 hover:border-indigo-300 cursor-pointer'; // UNLOCKED FUTURE BLANKS
+                                  
                                   return (
-                                    <div key={i} onClick={isFuture ? undefined : () => handleToggle(dbDate, status)} className={`relative p-4 rounded-2xl border-2 flex flex-col items-center justify-center gap-1 transition-all group ${bgClass} ${isToday ? 'ring-4 ring-indigo-500/20 scale-[1.02] z-10' : ''}`}>
+                                    <div key={i} onClick={() => handleToggle(dbDate, status)} className={`relative p-4 rounded-2xl border-2 flex flex-col items-center justify-center gap-1 transition-all group ${bgClass} ${isToday ? 'ring-4 ring-indigo-500/20 scale-[1.02] z-10' : ''}`}>
                                       {isToday && <span className="absolute -top-2 bg-rose-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest">Today</span>}
-                                      {isFuture && <Lock size={12} className="absolute top-3 right-3 opacity-30" />}
                                       <span className="text-[9px] font-black uppercase tracking-widest opacity-60 mt-1">{date.toLocaleDateString('en-US', { weekday: 'short' })}</span>
                                       <span className="text-2xl font-black leading-none">{date.getDate()}</span>
                                       <span className="text-[9px] font-bold opacity-80 uppercase">{date.toLocaleString('default', { month: 'short' })}</span>
@@ -216,7 +214,7 @@ export default function DailyAttendance({ employees, logHistory }) {
                                   <div className="w-20 h-20 flex items-center justify-center border border-black p-1"><img src="/logo.png" className="w-full h-full object-contain grayscale" alt="Logo" onError={(e) => e.target.src='https://via.placeholder.com/80?text=LOGO'} /></div>
                                   <div>
                                     <h1 className="text-4xl font-black tracking-[0.2em] leading-none text-gray-800">JAHS</h1>
-                                    <p className="font-bold tracking-[0.3em] text-[10px] uppercase mt-2">Electronics & Electrical Service Provider</p>
+                                    <p className="font-bold tracking-[0.3em] text-[10px] uppercase mt-2">Electronics & Electrical Services</p>
                                     <p className="text-xs leading-tight text-gray-800 mt-1">#424 Brgy Balubad, Bulacan, Bulacan<br/>Tel: 792-0595</p>
                                   </div>
                                 </div>
@@ -240,8 +238,7 @@ export default function DailyAttendance({ employees, logHistory }) {
                                   <tbody>
                                     {cutoffDays.map((date, i) => {
                                       const dbDate = getDBDateStr(date);
-                                      const isFuture = dbDate > getDBDateStr(new Date()); 
-                                      const status = isFuture ? null : attendanceData[`${emp.id}-${dbDate}`];
+                                      const status = attendanceData[`${emp.id}-${dbDate}`];
                                       
                                       let dIn = ""; let dOut = ""; let dAct = ""; let rowStyle = "";
 
@@ -254,41 +251,21 @@ export default function DailyAttendance({ employees, logHistory }) {
                                           <td className="border border-black font-bold text-[10px] bg-gray-100/50">
                                             {date.toLocaleDateString('en-US', { month: 'short', day: '2-digit' })} ({date.toLocaleDateString('en-US', { weekday: 'short' })})
                                           </td>
-                                          <td className="border border-black p-0">
-                                            <input type="text" defaultValue={dIn} placeholder="-" className="w-full h-8 text-center outline-none bg-transparent font-mono text-[11px] uppercase focus:bg-indigo-100 hover:bg-slate-100 transition-colors placeholder:text-gray-300" />
-                                          </td>
-                                          <td className="border border-black p-0">
-                                            <input type="text" defaultValue={dOut} placeholder="-" className="w-full h-8 text-center outline-none bg-transparent font-mono text-[11px] uppercase focus:bg-indigo-100 hover:bg-slate-100 transition-colors placeholder:text-gray-300" />
-                                          </td>
-                                          <td className="border border-black p-0">
-                                            <input type="text" defaultValue={dAct} placeholder="-" className="w-full h-8 text-center outline-none bg-transparent font-bold text-[10px] uppercase focus:bg-indigo-100 hover:bg-slate-100 transition-colors placeholder:text-gray-300 px-2" />
-                                          </td>
+                                          <td className="border border-black p-0"><input type="text" defaultValue={dIn} placeholder="-" className="w-full h-8 text-center outline-none bg-transparent font-mono text-[11px] uppercase focus:bg-indigo-100 hover:bg-slate-100 transition-colors placeholder:text-gray-300" /></td>
+                                          <td className="border border-black p-0"><input type="text" defaultValue={dOut} placeholder="-" className="w-full h-8 text-center outline-none bg-transparent font-mono text-[11px] uppercase focus:bg-indigo-100 hover:bg-slate-100 transition-colors placeholder:text-gray-300" /></td>
+                                          <td className="border border-black p-0"><input type="text" defaultValue={dAct} placeholder="-" className="w-full h-8 text-center outline-none bg-transparent font-bold text-[10px] uppercase focus:bg-indigo-100 hover:bg-slate-100 transition-colors placeholder:text-gray-300 px-2" /></td>
                                         </tr>
                                       );
                                     })}
                                   </tbody>
                                 </table>
 
-                                {/* --- UPDATED SIGNATURE FORMAT --- */}
+                                {/* --- SIGNATURES --- */}
                                 <div className="mt-12 flex flex-col gap-6 w-72 mx-auto text-[11px] text-center">
-                                   <div className="w-full">
-                                      <div className="border-b border-black w-full h-5"></div>
-                                      <p className="mt-1 text-gray-800">Prepared By:</p>
-                                   </div>
-                                   <div className="w-full">
-                                      <div className="border-b border-black w-full h-5 flex items-end justify-center pb-[2px]">
-                                         <span className="font-bold text-sm leading-none">Glaiza P. Santos</span>
-                                      </div>
-                                      <p className="mt-1 text-gray-800">Checked By:</p>
-                                   </div>
-                                   <div className="w-full">
-                                      <div className="border-b border-black w-full h-5 flex items-end justify-center pb-[2px]">
-                                         <span className="font-bold text-sm leading-none">Jose Alexander H. Santos</span>
-                                      </div>
-                                      <p className="mt-1 text-gray-800">Approved By:</p>
-                                   </div>
+                                   <div className="w-full"><div className="border-b border-black w-full h-5"></div><p className="mt-1 text-gray-800">Prepared By:</p></div>
+                                   <div className="w-full"><div className="border-b border-black w-full h-5 flex items-end justify-center pb-[2px]"><span className="font-bold text-sm leading-none">Glaiza P. Santos</span></div><p className="mt-1 text-gray-800">Checked By:</p></div>
+                                   <div className="w-full"><div className="border-b border-black w-full h-5 flex items-end justify-center pb-[2px]"><span className="font-bold text-sm leading-none">Jose Alexander H. Santos</span></div><p className="mt-1 text-gray-800">Approved By:</p></div>
                                 </div>
-
                               </div>
                             </div>
 
@@ -307,7 +284,6 @@ export default function DailyAttendance({ employees, logHistory }) {
       {/* --- PRINT ONLY VIEW: OVERALL MATRIX --- */}
       {printMode === 'matrix' && (
         <div className="block text-black bg-white p-4 font-sans max-w-none">
-          {/* ... [Rest of Matrix code remains exactly the same] ... */}
           <div className="flex justify-between items-end mb-6 border-b-2 border-black pb-4">
             <div>
               <h2 className="text-2xl font-bold uppercase tracking-tight">JAHS Electronic and Electrical Service</h2>
@@ -346,17 +322,21 @@ export default function DailyAttendance({ employees, logHistory }) {
                       <span className="font-bold">{emp.name}</span><br/>
                       <span className="font-mono text-[9px] text-gray-500">{emp.idNo}</span>
                     </td>
+                    
                     {cutoffDays.map((d, i) => {
                       const dbDate = getDBDateStr(d);
-                      const isFuture = dbDate > todayDBStr;
-                      if (isFuture) return <td key={i} className="border border-black text-gray-300">-</td>;
                       const status = attendanceData[`${emp.id}-${dbDate}`];
+                      // Show status if it exists, otherwise leave blank if future
+                      if (dbDate > todayDBStr && !status) return <td key={i} className="border border-black text-gray-300">-</td>;
+                      
                       let mark = 'NW'; let textColor = 'text-red-600';
                       if (status === 'present') { mark = 'P'; textColor = 'text-green-700'; p++; }
                       else if (status === 'leave') { mark = 'L'; textColor = 'text-amber-600'; l++; }
                       else { nw++; }
+
                       return <td key={i} className={`border border-black font-bold ${textColor}`}>{mark}</td>;
                     })}
+                    
                     <td className="border border-black font-black bg-gray-100 text-green-700">{p}</td>
                     <td className="border border-black font-black bg-gray-100 text-amber-600">{l}</td>
                     <td className="border border-black font-black bg-gray-100 text-red-600">{nw}</td>
