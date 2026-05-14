@@ -110,13 +110,14 @@ export default function EmployeeProfiles({ employees }) {
                         </div>
 
                         <div className="p-8 md:p-12 overflow-x-auto print:p-0 print:overflow-visible">
-                          <div className="bg-white max-w-3xl mx-auto shadow-2xl print:shadow-none border border-slate-200 print:border-none p-10 md:p-14 print:p-0 min-h-[1000px] pointer-events-none">
+                          <div className="bg-white max-w-3xl mx-auto shadow-2xl border border-slate-200 p-10 md:p-14 min-h-[1000px] pointer-events-none">
                             
                             <div className="flex items-start gap-5 mb-4">
                               <div className="w-20 h-20 flex items-center justify-center border border-black p-1"><img src="/logo.png" className="w-full h-full object-contain grayscale" alt="Logo" onError={(e) => e.target.src='https://via.placeholder.com/80?text=LOGO'} /></div>
                               <div>
                                 <h1 className="text-4xl font-black tracking-[0.2em] leading-none text-gray-800">JAHS</h1>
-                                <p className="font-bold tracking-[0.3em] text-[10px] uppercase mt-2">Electronics & Electrical Services</p>
+                                <h1 className="text-4xl font-black tracking-[0.2em] leading-none text-gray-400 mt-[-5px]">TELECOM</h1>
+                                <p className="font-bold tracking-[0.3em] text-[10px] uppercase mt-2">Telecom Service Provider</p>
                                 <p className="text-xs leading-tight text-gray-800 mt-1">#424 Brgy Balubad, Bulacan, Bulacan<br/>Tel: 792-0595</p>
                               </div>
                             </div>
@@ -163,30 +164,26 @@ export default function EmployeeProfiles({ employees }) {
                               </tbody>
                             </table>
 
-                            {/* --- UPDATED SIGNATURE FORMAT --- */}
+                            {/* SIGNATURE BLOCK */}
                             <div className="mt-12 flex flex-col gap-6 w-72 mx-auto text-[11px] text-center">
-                               
                                <div className="w-full">
                                   <div className="border-b border-black w-full h-5"></div>
                                   <p className="mt-1 text-gray-800">Prepared By:</p>
                                </div>
-
                                <div className="w-full">
                                   <div className="border-b border-black w-full h-5 flex items-end justify-center pb-[2px]">
                                      <span className="font-bold text-sm leading-none">Glaiza P. Santos</span>
                                   </div>
                                   <p className="mt-1 text-gray-800">Checked By:</p>
                                </div>
-
                                <div className="w-full">
                                   <div className="border-b border-black w-full h-5 flex items-end justify-center pb-[2px]">
                                      <span className="font-bold text-sm leading-none">Jose Alexander H. Santos</span>
                                   </div>
                                   <p className="mt-1 text-gray-800">Approved By:</p>
                                </div>
-
                             </div>
-
+                            
                           </div>
                         </div>
 
@@ -198,8 +195,101 @@ export default function EmployeeProfiles({ employees }) {
          </div>
       </div>
 
-      {/* HIDDEN PRINT VIEW FOR PUBLIC PROFILE */}
-      <div className="hidden print:block"></div>
+      {/* --- PRINT ONLY VIEW FOR PUBLIC PROFILE --- */}
+      {/* This block handles what actually goes to the printer */}
+      <div className="hidden print:block text-black bg-white p-4 font-sans max-w-3xl mx-auto">
+        {employees.filter(e => e.id === expandedId).map(emp => {
+            return (
+              <div key={`print-dtr-${emp.id}`} className="flex flex-col h-[95vh]">
+                
+                {/* Header (Logo + Company Info) */}
+                <div className="flex items-start gap-5 mb-4">
+                  <div className="w-16 h-16 flex items-center justify-center border border-black p-1">
+                    <img src="/logo.png" className="w-full h-full object-contain grayscale" alt="Logo" onError={(e) => e.target.src='https://via.placeholder.com/60?text=LOGO'} />
+                  </div>
+                  <div>
+                    <h1 className="text-4xl font-black tracking-[0.2em] leading-none text-gray-800">JAHS</h1>
+                    <h1 className="text-4xl font-black tracking-[0.2em] leading-none text-gray-400 mt-[-5px]">TELECOM</h1>
+                    <p className="font-bold tracking-[0.3em] text-[10px] uppercase mt-2">Telecom Service Provider</p>
+                    <p className="text-[10px] leading-tight text-gray-800 mt-1">#424 Brgy Balubad, Bulacan, Bulacan<br/>Tel: 792-0595</p>
+                  </div>
+                </div>
+
+                {/* Form Title */}
+                <div className="border-t-2 border-black border-b-2 py-1.5 mb-6 text-center font-bold uppercase tracking-[0.5em] text-sm bg-gray-50 mt-4">
+                  Daily Time Record
+                </div>
+                
+                {/* Personnel Name */}
+                <div className="mb-6 text-sm flex items-end">
+                  <span className="font-bold">Name:</span>
+                  <div className="font-bold border-b border-black ml-3 flex-1 px-2 py-0.5">{emp.name}</div>
+                </div>
+
+                {/* The DTR Matrix */}
+                <table className="w-full border-collapse border-2 border-black text-center text-xs flex-1">
+                  <thead>
+                    <tr className="bg-gray-100">
+                      <th className="border border-black py-2 w-1/5 uppercase text-[10px]">Date</th>
+                      <th className="border border-black py-2 w-1/4 uppercase text-[10px]">Time-In</th>
+                      <th className="border border-black py-2 w-1/4 uppercase text-[10px]">Time-Out</th>
+                      <th className="border border-black py-2 w-[30%] uppercase text-[10px]">Activity</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cutoffDays.map((date, i) => {
+                      const dbDate = getDBDateStr(date);
+                      const isFuture = dbDate > getDBDateStr(new Date()); 
+                      const status = isFuture ? null : attendanceLogs[`${emp.id}-${dbDate}`];
+                      
+                      let dIn = "-"; let dOut = "-"; let dAct = "-"; let rowStyle = "";
+
+                      if (status === 'present') { dIn = "08:00 AM"; dOut = "05:00 PM"; } 
+                      else if (status === 'leave') { dAct = "OFFICIAL LEAVE"; rowStyle = "text-gray-500 bg-gray-50"; } 
+                      else if (status === 'absent') { dAct = "NO WORK"; rowStyle = "text-gray-400 bg-gray-50"; }
+
+                      return (
+                        <tr key={i} className={`h-6 ${rowStyle}`}>
+                          <td className="border border-black font-bold text-[10px] bg-gray-50/50">
+                            {date.toLocaleDateString('en-US', { month: 'short', day: '2-digit' })} ({date.toLocaleDateString('en-US', { weekday: 'short' })})
+                          </td>
+                          <td className="border border-black font-mono text-[11px] uppercase">{dIn}</td>
+                          <td className="border border-black font-mono text-[11px] uppercase">{dOut}</td>
+                          <td className="border border-black font-bold text-[9px] uppercase">{dAct}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+
+                {/* Signatures */}
+                <div className="mt-8 flex flex-col gap-5 w-72 mx-auto text-[11px] text-center">
+                   <div className="w-full">
+                      <div className="border-b border-black w-full h-5"></div>
+                      <p className="mt-1 text-gray-800">Prepared By:</p>
+                   </div>
+                   <div className="w-full">
+                      <div className="border-b border-black w-full h-5 flex items-end justify-center pb-[2px]">
+                         <span className="font-bold text-sm leading-none">Glaiza P. Santos</span>
+                      </div>
+                      <p className="mt-1 text-gray-800">Checked By:</p>
+                   </div>
+                   <div className="w-full">
+                      <div className="border-b border-black w-full h-5 flex items-end justify-center pb-[2px]">
+                         <span className="font-bold text-sm leading-none">Jose Alexander H. Santos</span>
+                      </div>
+                      <p className="mt-1 text-gray-800">Approved By:</p>
+                   </div>
+                </div>
+
+                <p className="mt-auto text-[8px] text-center text-gray-400 italic">
+                  JAHS System Portal Generated DTR - © 2026
+                </p>
+
+              </div>
+            );
+        })}
+      </div>
 
     </div>
   );
