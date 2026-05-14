@@ -12,7 +12,11 @@ const getDBDateStr = (dateObj) => {
 export default function EmployeeProfiles({ employees }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [viewDate, setViewDate] = useState(new Date());
+  
+  // These two states hold the data fetched from Supabase
   const [attendanceLogs, setAttendanceLogs] = useState({});
+  const [dtrDetails, setDtrDetails] = useState({}); // This holds the OT and Activity!
+  
   const [expandedId, setExpandedId] = useState(null);
 
   const handlePrevCutoff = () => { const d = new Date(viewDate); d.setDate(d.getDate() - 15); setViewDate(d); };
@@ -32,11 +36,25 @@ export default function EmployeeProfiles({ employees }) {
     if (d.getDay() !== 0) cutoffDays.push(new Date(d)); d.setDate(d.getDate() + 1); 
   }
 
+  // --- FETCH FROM DATABASE ---
   const fetchLogs = async () => {
     const { data } = await supabase.from('attendance_logs').select('*');
-    const mapped = {};
-    data?.forEach(log => mapped[`${log.employee_id}-${log.log_date}`] = log.status);
-    setAttendanceLogs(mapped);
+    const mappedStatus = {};
+    const mappedDetails = {};
+    
+    data?.forEach(log => {
+      const key = `${log.employee_id}-${log.log_date}`;
+      mappedStatus[key] = log.status;
+      
+      // We grab the specific Admin edits right here
+      mappedDetails[key] = {
+        timeIn: log.time_in,
+        timeOut: log.time_out,
+        activity: log.activity
+      };
+    });
+    setAttendanceLogs(mappedStatus);
+    setDtrDetails(mappedDetails); // Store them to display on the paper
   };
 
   useEffect(() => { fetchLogs(); }, [viewDate]);
@@ -101,7 +119,7 @@ export default function EmployeeProfiles({ employees }) {
                             <FileText size={18} className="text-indigo-600" />
                             <div>
                               <p className="font-bold text-slate-900 text-sm">Standard DTR View</p>
-                              <p className="text-[10px] text-slate-400 uppercase tracking-widest font-black mt-0.5">Read-only system records</p>
+                              <p className="text-[10px] text-slate-400 uppercase tracking-widest font-black mt-0.5">Read-only system records (Synced with Admin Edits)</p>
                             </div>
                           </div>
                           <button onClick={() => window.print()} className="flex items-center gap-2 px-8 py-4 bg-slate-900 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl hover:shadow-2xl">
@@ -110,13 +128,14 @@ export default function EmployeeProfiles({ employees }) {
                         </div>
 
                         <div className="p-8 md:p-12 overflow-x-auto print:p-0 print:overflow-visible">
-                          <div className="bg-white max-w-3xl mx-auto shadow-2xl border border-slate-200 p-10 md:p-14 min-h-[1000px] pointer-events-none">
+                          <div className="bg-white max-w-3xl mx-auto shadow-2xl print:shadow-none border border-slate-200 print:border-none p-10 md:p-14 print:p-0 min-h-[1000px] pointer-events-none">
                             
                             <div className="flex items-start gap-5 mb-4">
                               <div className="w-20 h-20 flex items-center justify-center border border-black p-1"><img src="/logo.png" className="w-full h-full object-contain grayscale" alt="Logo" onError={(e) => e.target.src='https://via.placeholder.com/80?text=LOGO'} /></div>
                               <div>
                                 <h1 className="text-4xl font-black tracking-[0.2em] leading-none text-gray-800">JAHS</h1>
-                                <p className="font-bold tracking-[0.3em] text-[10px] uppercase mt-2">Electronics & Electrical Services</p>
+                                <h1 className="text-4xl font-black tracking-[0.2em] leading-none text-gray-400 mt-[-5px]">TELECOM</h1>
+                                <p className="font-bold tracking-[0.3em] text-[10px] uppercase mt-2">Telecom Service Provider</p>
                                 <p className="text-xs leading-tight text-gray-800 mt-1">#424 Brgy Balubad, Bulacan, Bulacan<br/>Tel: 792-0595</p>
                               </div>
                             </div>
@@ -143,11 +162,14 @@ export default function EmployeeProfiles({ employees }) {
                                   const isFuture = dbDate > getDBDateStr(new Date()); 
                                   const status = isFuture ? null : attendanceLogs[`${emp.id}-${dbDate}`];
                                   
-                                  let dIn = "-"; let dOut = "-"; let dAct = "-"; let rowStyle = "";
-
-                                  if (status === 'present') { dIn = "08:00 AM"; dOut = "05:00 PM"; } 
-                                  else if (status === 'leave') { dAct = "OFFICIAL LEAVE"; rowStyle = "text-gray-500 bg-gray-50"; } 
-                                  else if (status === 'absent') { dAct = "NO WORK"; rowStyle = "text-gray-400 bg-gray-50"; }
+                                  // --- THE MAGIC HAPPENS HERE ---
+                                  // It pulls the exact Overtime strings the admin saved
+                                  const details = dtrDetails[`${emp.id}-${dbDate}`] || {};
+                                  
+                                  let dIn = details.timeIn ? details.timeIn : (status === 'present' ? '08:00 AM' : '-');
+                                  let dOut = details.timeOut ? details.timeOut : (status === 'present' ? '05:00 PM' : '-');
+                                  let dAct = details.activity ? details.activity : (status === 'leave' ? 'OFFICIAL LEAVE' : (status === 'absent' ? 'NO WORK' : '-'));
+                                  let rowStyle = (status === 'leave' || status === 'absent') ? "text-gray-500 bg-gray-50" : "";
 
                                   return (
                                     <tr key={i} className={`h-8 ${rowStyle}`}>
@@ -163,10 +185,11 @@ export default function EmployeeProfiles({ employees }) {
                               </tbody>
                             </table>
 
-                            {/* SIGNATURE BLOCK */}
                             <div className="mt-12 flex flex-col gap-6 w-72 mx-auto text-[11px] text-center">
                                <div className="w-full">
-                                  <div className="border-b border-black w-full h-5"></div>
+                                  <div className="border-b border-black w-full h-5 flex items-end justify-center pb-[2px]">
+                                     <span className="font-bold text-sm leading-none">{emp.name}</span>
+                                  </div>
                                   <p className="mt-1 text-gray-800">Prepared By:</p>
                                </div>
                                <div className="w-full">
@@ -182,7 +205,6 @@ export default function EmployeeProfiles({ employees }) {
                                   <p className="mt-1 text-gray-800">Approved By:</p>
                                </div>
                             </div>
-                            
                           </div>
                         </div>
 
@@ -195,36 +217,25 @@ export default function EmployeeProfiles({ employees }) {
       </div>
 
       {/* --- PRINT ONLY VIEW FOR PUBLIC PROFILE --- */}
-      {/* This block handles what actually goes to the printer */}
       <div className="hidden print:block text-black bg-white p-4 font-sans max-w-3xl mx-auto">
         {employees.filter(e => e.id === expandedId).map(emp => {
             return (
               <div key={`print-dtr-${emp.id}`} className="flex flex-col h-[95vh]">
                 
-                {/* Header (Logo + Company Info) */}
                 <div className="flex items-start gap-5 mb-4">
-                  <div className="w-16 h-16 flex items-center justify-center border border-black p-1">
-                    <img src="/logo.png" className="w-full h-full object-contain grayscale" alt="Logo" onError={(e) => e.target.src='https://via.placeholder.com/60?text=LOGO'} />
-                  </div>
+                  <div className="w-16 h-16 flex items-center justify-center border border-black p-1"><img src="/logo.png" className="w-full h-full object-contain grayscale" alt="Logo" onError={(e) => e.target.src='https://via.placeholder.com/80?text=LOGO'} /></div>
                   <div>
                     <h1 className="text-4xl font-black tracking-[0.2em] leading-none text-gray-800">JAHS</h1>
-                    <p className="font-bold tracking-[0.3em] text-[10px] uppercase mt-2">Electronics & Electrical Services</p>
+                    <h1 className="text-4xl font-black tracking-[0.2em] leading-none text-gray-400 mt-[-5px]">TELECOM</h1>
+                    <p className="font-bold tracking-[0.3em] text-[10px] uppercase mt-2">Telecom Service Provider</p>
                     <p className="text-[10px] leading-tight text-gray-800 mt-1">#424 Brgy Balubad, Bulacan, Bulacan<br/>Tel: 792-0595</p>
                   </div>
                 </div>
 
-                {/* Form Title */}
-                <div className="border-t-2 border-black border-b-2 py-1.5 mb-6 text-center font-bold uppercase tracking-[0.5em] text-sm bg-gray-50 mt-4">
-                  Daily Time Record
-                </div>
+                <div className="border-t-2 border-black border-b-2 py-1.5 mb-6 text-center font-bold uppercase tracking-[0.5em] text-sm bg-gray-50 mt-4">Daily Time Record</div>
                 
-                {/* Personnel Name */}
-                <div className="mb-6 text-sm flex items-end">
-                  <span className="font-bold">Name:</span>
-                  <div className="font-bold border-b border-black ml-3 flex-1 px-2 py-0.5">{emp.name}</div>
-                </div>
+                <div className="mb-6 text-sm flex items-end"><span className="font-bold">Name:</span><div className="font-bold border-b border-black ml-3 flex-1 px-2 py-0.5">{emp.name}</div></div>
 
-                {/* The DTR Matrix */}
                 <table className="w-full border-collapse border-2 border-black text-center text-xs flex-1">
                   <thead>
                     <tr className="bg-gray-100">
@@ -240,11 +251,13 @@ export default function EmployeeProfiles({ employees }) {
                       const isFuture = dbDate > getDBDateStr(new Date()); 
                       const status = isFuture ? null : attendanceLogs[`${emp.id}-${dbDate}`];
                       
-                      let dIn = "-"; let dOut = "-"; let dAct = "-"; let rowStyle = "";
-
-                      if (status === 'present') { dIn = "08:00 AM"; dOut = "05:00 PM"; } 
-                      else if (status === 'leave') { dAct = "OFFICIAL LEAVE"; rowStyle = "text-gray-500 bg-gray-50"; } 
-                      else if (status === 'absent') { dAct = "NO WORK"; rowStyle = "text-gray-400 bg-gray-50"; }
+                      // --- READS THE ADMIN EDITS HERE TOO ---
+                      const details = dtrDetails[`${emp.id}-${dbDate}`] || {};
+                      
+                      let dIn = details.timeIn ? details.timeIn : (status === 'present' ? '08:00 AM' : '-');
+                      let dOut = details.timeOut ? details.timeOut : (status === 'present' ? '05:00 PM' : '-');
+                      let dAct = details.activity ? details.activity : (status === 'leave' ? 'OFFICIAL LEAVE' : (status === 'absent' ? 'NO WORK' : '-'));
+                      let rowStyle = (status === 'leave' || status === 'absent') ? "text-gray-500 bg-gray-50" : "";
 
                       return (
                         <tr key={i} className={`h-6 ${rowStyle}`}>
@@ -260,29 +273,22 @@ export default function EmployeeProfiles({ employees }) {
                   </tbody>
                 </table>
 
-                {/* Signatures */}
                 <div className="mt-8 flex flex-col gap-5 w-72 mx-auto text-[11px] text-center">
                    <div className="w-full">
-                      <div className="border-b border-black w-full h-5"></div>
+                      <div className="border-b border-black w-full h-5 flex items-end justify-center pb-[2px]"><span className="font-bold text-sm leading-none">{emp.name}</span></div>
                       <p className="mt-1 text-gray-800">Prepared By:</p>
                    </div>
                    <div className="w-full">
-                      <div className="border-b border-black w-full h-5 flex items-end justify-center pb-[2px]">
-                         <span className="font-bold text-sm leading-none">Glaiza P. Santos</span>
-                      </div>
+                      <div className="border-b border-black w-full h-5 flex items-end justify-center pb-[2px]"><span className="font-bold text-sm leading-none">Glaiza P. Santos</span></div>
                       <p className="mt-1 text-gray-800">Checked By:</p>
                    </div>
                    <div className="w-full">
-                      <div className="border-b border-black w-full h-5 flex items-end justify-center pb-[2px]">
-                         <span className="font-bold text-sm leading-none">Jose Alexander H. Santos</span>
-                      </div>
+                      <div className="border-b border-black w-full h-5 flex items-end justify-center pb-[2px]"><span className="font-bold text-sm leading-none">Jose Alexander H. Santos</span></div>
                       <p className="mt-1 text-gray-800">Approved By:</p>
                    </div>
                 </div>
 
-                <p className="mt-auto text-[8px] text-center text-gray-400 italic">
-                  JAHS System Portal Generated DTR - © 2026
-                </p>
+                <p className="mt-auto text-[8px] text-center text-gray-400 italic">JAHS System Portal Generated DTR - © 2026</p>
 
               </div>
             );
