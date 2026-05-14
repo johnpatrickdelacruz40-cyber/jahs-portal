@@ -10,6 +10,7 @@ const getDBDateStr = (dateObj) => {
 };
 
 export default function EmployeeProfiles({ employees }) {
+  // ... [Keep existing state variables] ...
   const [searchTerm, setSearchTerm] = useState('');
   const [viewDate, setViewDate] = useState(new Date());
   const [attendanceLogs, setAttendanceLogs] = useState({});
@@ -26,13 +27,16 @@ export default function EmployeeProfiles({ employees }) {
     return { label: `${new Date(year, month - 1, 1).toLocaleString('default', { month: 'long' })} 26th - ${baseDate.toLocaleString('default', { month: 'long' })} 10th`, start: new Date(year, month - 1, 26), end: new Date(year, month, 10) };
   };
 
+  // --- SUNDAY FIX APPLIED HERE ---
   const currentCutoff = getCutoffRange(viewDate);
   const cutoffDays = [];
   let d = new Date(currentCutoff.start);
   while (d <= currentCutoff.end) { 
-    if (d.getDay() !== 0) cutoffDays.push(new Date(d)); d.setDate(d.getDate() + 1); 
+    cutoffDays.push(new Date(d)); // This now includes Sundays perfectly!
+    d.setDate(d.getDate() + 1); 
   }
 
+  // ... [Keep the exact rest of your EmployeeProfiles.jsx code below this line] ...
   const fetchLogs = async () => {
     const { data } = await supabase.from('attendance_logs').select('*');
     const mappedStatus = {};
@@ -109,7 +113,7 @@ export default function EmployeeProfiles({ employees }) {
                             <FileText size={18} className="text-indigo-600" />
                             <div>
                               <p className="font-bold text-slate-900 text-sm">Standard DTR View</p>
-                              <p className="text-[10px] text-slate-400 uppercase tracking-widest font-black mt-0.5">Read-only system records</p>
+                              <p className="text-[10px] text-slate-400 uppercase tracking-widest font-black mt-0.5">Read-only system records (Synced with Admin Edits)</p>
                             </div>
                           </div>
                           <button onClick={() => window.print()} className="flex items-center gap-2 px-8 py-4 bg-slate-900 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl hover:shadow-2xl">
@@ -124,8 +128,7 @@ export default function EmployeeProfiles({ employees }) {
                               <div className="w-20 h-20 flex items-center justify-center border border-black p-1"><img src="/logo.png" className="w-full h-full object-contain grayscale" alt="Logo" onError={(e) => e.target.src='https://via.placeholder.com/80?text=LOGO'} /></div>
                               <div>
                                 <h1 className="text-4xl font-black tracking-[0.2em] leading-none text-gray-800">JAHS</h1>
-                                <h1 className="text-4xl font-black tracking-[0.2em] leading-none text-gray-400 mt-[-5px]">TELECOM</h1>
-                                <p className="font-bold tracking-[0.3em] text-[10px] uppercase mt-2">Telecom Service Provider</p>
+                                <p className="font-bold tracking-[0.3em] text-[10px] uppercase mt-2">Electronic and Electrical Services</p>
                                 <p className="text-xs leading-tight text-gray-800 mt-1">#424 Brgy Balubad, Bulacan, Bulacan<br/>Tel: 792-0595</p>
                               </div>
                             </div>
@@ -151,11 +154,12 @@ export default function EmployeeProfiles({ employees }) {
                                   const dbDate = getDBDateStr(date);
                                   const isFuture = dbDate > getDBDateStr(new Date()); 
                                   const status = isFuture ? null : attendanceLogs[`${emp.id}-${dbDate}`];
+                                  
                                   const details = dtrDetails[`${emp.id}-${dbDate}`] || {};
                                   
-                                  let dIn = details.timeIn ?? (status === 'present' ? '08:00 AM' : '-');
-                                  let dOut = details.timeOut ?? (status === 'present' ? '05:00 PM' : '-');
-                                  let dAct = details.activity ?? (status === 'leave' ? 'OFFICIAL LEAVE' : (status === 'absent' ? 'NO WORK' : '-'));
+                                  let dIn = details.timeIn ? details.timeIn : (status === 'present' ? '08:00 AM' : '-');
+                                  let dOut = details.timeOut ? details.timeOut : (status === 'present' ? '05:00 PM' : '-');
+                                  let dAct = details.activity ? details.activity : (status === 'leave' ? 'OFFICIAL LEAVE' : (status === 'absent' ? 'NO WORK' : '-'));
                                   let rowStyle = (status === 'leave' || status === 'absent') ? "text-gray-500 bg-gray-50" : "";
 
                                   return (
@@ -210,7 +214,7 @@ export default function EmployeeProfiles({ employees }) {
               <div key={`print-dtr-${emp.id}`} className="flex flex-col h-[95vh]">
                 
                 <div className="flex items-start gap-5 mb-4">
-                  <div className="w-16 h-16 flex items-center justify-center border border-black p-1"><img src="/logo.png" className="w-full h-full object-contain grayscale" alt="Logo" onError={(e) => e.target.src='https://via.placeholder.com/80?text=LOGO'} /></div>
+                  <div className="w-16 h-16 flex items-center justify-center border border-black p-1"><img src="/logo.png" className="w-full h-full object-contain grayscale" alt="Logo" onError={(e) => e.target.src='https://via.placeholder.com/60?text=LOGO'} /></div>
                   <div>
                     <h1 className="text-4xl font-black tracking-[0.2em] leading-none text-gray-800">JAHS</h1>
                     <h1 className="text-4xl font-black tracking-[0.2em] leading-none text-gray-400 mt-[-5px]">TELECOM</h1>
@@ -237,11 +241,12 @@ export default function EmployeeProfiles({ employees }) {
                       const dbDate = getDBDateStr(date);
                       const isFuture = dbDate > getDBDateStr(new Date()); 
                       const status = isFuture ? null : attendanceLogs[`${emp.id}-${dbDate}`];
+                      
                       const details = dtrDetails[`${emp.id}-${dbDate}`] || {};
                       
-                      let dIn = details.timeIn ?? (status === 'present' ? '08:00 AM' : '-');
-                      let dOut = details.timeOut ?? (status === 'present' ? '05:00 PM' : '-');
-                      let dAct = details.activity ?? (status === 'leave' ? 'OFFICIAL LEAVE' : (status === 'absent' ? 'NO WORK' : '-'));
+                      let dIn = details.timeIn ? details.timeIn : (status === 'present' ? '08:00 AM' : '-');
+                      let dOut = details.timeOut ? details.timeOut : (status === 'present' ? '05:00 PM' : '-');
+                      let dAct = details.activity ? details.activity : (status === 'leave' ? 'OFFICIAL LEAVE' : (status === 'absent' ? 'NO WORK' : '-'));
                       let rowStyle = (status === 'leave' || status === 'absent') ? "text-gray-500 bg-gray-50" : "";
 
                       return (

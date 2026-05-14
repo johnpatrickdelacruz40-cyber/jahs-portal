@@ -10,13 +10,13 @@ const getDBDateStr = (dateObj) => {
 };
 
 export default function DailyAttendance({ employees, logHistory }) {
+  // ... [Keep existing state variables] ...
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedId, setExpandedId] = useState(null);
   const [attendanceData, setAttendanceData] = useState({});
   const [dtrDetails, setDtrDetails] = useState({}); 
   const [isSaving, setIsSaving] = useState(false);
   const [viewDate, setViewDate] = useState(new Date());
-  
   const [printMode, setPrintMode] = useState(null); 
 
   useEffect(() => {
@@ -40,14 +40,16 @@ export default function DailyAttendance({ employees, logHistory }) {
     return { label: `${new Date(year, month - 1, 1).toLocaleString('default', { month: 'long' })} 26th - ${baseDate.toLocaleString('default', { month: 'long' })} 10th`, start: new Date(year, month - 1, 26), end: new Date(year, month, 10) };
   };
 
+  // --- SUNDAY FIX APPLIED HERE ---
   const currentCutoff = getCutoffRange(viewDate);
   const cutoffDays = [];
   let dayTracker = new Date(currentCutoff.start);
   while (dayTracker <= currentCutoff.end) {
-    if (dayTracker.getDay() !== 0) cutoffDays.push(new Date(dayTracker)); 
+    cutoffDays.push(new Date(dayTracker)); // This now includes Sundays perfectly!
     dayTracker.setDate(dayTracker.getDate() + 1);
   }
 
+  // ... [Keep the exact rest of your DailyAttendance.jsx code below this line] ...
   const fetchLogs = async () => {
     const { data } = await supabase.from('attendance_logs').select('*');
     const mappedStatus = {};
@@ -242,8 +244,7 @@ export default function DailyAttendance({ employees, logHistory }) {
                                   <div className="w-20 h-20 flex items-center justify-center border border-black p-1"><img src="/logo.png" className="w-full h-full object-contain grayscale" alt="Logo" onError={(e) => e.target.src='https://via.placeholder.com/80?text=LOGO'} /></div>
                                   <div>
                                     <h1 className="text-4xl font-black tracking-[0.2em] leading-none text-gray-800">JAHS</h1>
-                                    <h1 className="text-4xl font-black tracking-[0.2em] leading-none text-gray-400 mt-[-5px]">TELECOM</h1>
-                                    <p className="font-bold tracking-[0.3em] text-[10px] uppercase mt-2">Telecom Service Provider</p>
+                                    <p className="font-bold tracking-[0.3em] text-[10px] uppercase mt-2">Electronic and Electrical Services</p>
                                     <p className="text-xs leading-tight text-gray-800 mt-1">#424 Brgy Balubad, Bulacan, Bulacan<br/>Tel: 792-0595</p>
                                   </div>
                                 </div>
@@ -281,13 +282,13 @@ export default function DailyAttendance({ employees, logHistory }) {
                                             {date.toLocaleDateString('en-US', { month: 'short', day: '2-digit' })} ({date.toLocaleDateString('en-US', { weekday: 'short' })})
                                           </td>
                                           <td className="border border-black p-0">
-                                            <input type="text" value={dIn} onChange={(e) => handleDetailChange(emp.id, dbDate, 'timeIn', e.target.value)} placeholder="-" className="w-full h-8 text-center outline-none bg-transparent font-mono text-[11px] uppercase focus:bg-indigo-100 hover:bg-slate-100 transition-colors placeholder:text-gray-300" />
+                                            <input type="text" value={dIn || ''} onChange={(e) => handleDetailChange(emp.id, dbDate, 'timeIn', e.target.value)} placeholder="-" className="w-full h-8 text-center outline-none bg-transparent font-mono text-[11px] uppercase focus:bg-indigo-100 hover:bg-slate-100 transition-colors placeholder:text-gray-300" />
                                           </td>
                                           <td className="border border-black p-0">
-                                            <input type="text" value={dOut} onChange={(e) => handleDetailChange(emp.id, dbDate, 'timeOut', e.target.value)} placeholder="-" className="w-full h-8 text-center outline-none bg-transparent font-mono text-[11px] uppercase focus:bg-indigo-100 hover:bg-slate-100 transition-colors placeholder:text-gray-300" />
+                                            <input type="text" value={dOut || ''} onChange={(e) => handleDetailChange(emp.id, dbDate, 'timeOut', e.target.value)} placeholder="-" className="w-full h-8 text-center outline-none bg-transparent font-mono text-[11px] uppercase focus:bg-indigo-100 hover:bg-slate-100 transition-colors placeholder:text-gray-300" />
                                           </td>
                                           <td className="border border-black p-0">
-                                            <input type="text" value={dAct} onChange={(e) => handleDetailChange(emp.id, dbDate, 'activity', e.target.value)} placeholder="-" className="w-full h-8 text-center outline-none bg-transparent font-bold text-[10px] uppercase focus:bg-indigo-100 hover:bg-slate-100 transition-colors placeholder:text-gray-300 px-2" />
+                                            <input type="text" value={dAct || ''} onChange={(e) => handleDetailChange(emp.id, dbDate, 'activity', e.target.value)} placeholder="-" className="w-full h-8 text-center outline-none bg-transparent font-bold text-[10px] uppercase focus:bg-indigo-100 hover:bg-slate-100 transition-colors placeholder:text-gray-300 px-2" />
                                           </td>
                                         </tr>
                                       );
