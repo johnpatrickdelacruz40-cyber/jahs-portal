@@ -113,7 +113,9 @@ export default function Dashboard({ employees }) {
     setShowSuggestions(false);
   };
 
-  // 4. SECURE CHATBOT LOGIC (FIXED 404 ERROR)
+  const total = employees.length;
+
+  // 4. SMART AUTO-DISCOVERY CHATBOT LOGIC
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, isBotTyping]);
 
   const handleSendMessage = async (e) => {
@@ -135,20 +137,43 @@ export default function Dashboard({ employees }) {
       - Employees here and attendance
       - Weeks and deployment safety. 
       
-      STRICT GUARDRAILS: 
+      Strictest GUARDRAILS: 
       If asked about anything else, politely decline. 
-      You MUST POLITELY DECLINE if they ask about any security information, admin details, passwords, database architecture, or private data. Maintain the privacy of the system at all costs.`;
+      You MUST POLITELY DECLINE if they ask about any security information, admin details, passwords, database architecture, or private data. Maintain the privacy of the system at all costs.
+
+     :
+      - Present today: ${todayStats.present} employees.
+      - On Leave today: ${todayStats.leave} employees.
+      - Absent/No Work today: ${todayStats.absent} employees.
+      - Total personnel count: ${total} employees.`;
 
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY; 
       
       if (!apiKey) {
-        setMessages(prev => [...prev, { id: Date.now() + 1, text: "API Key is missing. Please add VITE_GEMINI_API_KEY to your .env file.", sender: 'bot' }]);
-        setIsBotTyping(false);
-        return;
+        throw new Error("VITE_GEMINI_API_KEY is missing! Did you restart your Vite server?");
       }
 
-      // FIXED: Changed endpoint to gemini-1.5-flash to resolve 404 Error
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+      // --- THE AUTO-DISCOVERY FIX (Finds the exact model Google allows you to use) ---
+      const modelsRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+      const modelsData = await modelsRes.json();
+      
+      if (!modelsRes.ok) {
+         throw new Error("Failed to authenticate API Key: " + (modelsData.error?.message || "Unknown error"));
+      }
+
+      const validModel = modelsData.models.find(m => 
+        m.supportedGenerationMethods.includes("generateContent") && 
+        m.name.includes("gemini")
+      );
+
+      if (!validModel) {
+        throw new Error("Google says your API key doesn't have access to any Gemini models.");
+      }
+
+      const exactModelName = validModel.name; 
+
+      // --- SEND THE MESSAGE USING THE DISCOVERED MODEL ---
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${exactModelName}:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -160,7 +185,11 @@ export default function Dashboard({ employees }) {
 
       const data = await response.json();
       
-      let botReply = "I am sorry, I am having trouble connecting to the JAHS server.";
+      if (!response.ok || data.error) {
+        throw new Error(data.error?.message || `HTTP Error ${response.status}`);
+      }
+      
+      let botReply = "I am sorry, I could not generate a response.";
       if (data.candidates && data.candidates[0].content.parts[0].text) {
         botReply = data.candidates[0].content.parts[0].text;
       }
@@ -168,15 +197,18 @@ export default function Dashboard({ employees }) {
       setMessages(prev => [...prev, { id: Date.now() + 1, text: botReply, sender: 'bot' }]);
 
     } catch (error) {
-      console.error("Chatbot Error:", error);
-      setMessages(prev => [...prev, { id: Date.now() + 1, text: "Network error. Please ensure you have internet access.", sender: 'bot' }]);
+      console.error("Chatbot Diagnostic Error:", error);
+      setMessages(prev => [...prev, { 
+        id: Date.now() + 1, 
+        text: `SYSTEM ERROR: ${error.message}`, 
+        sender: 'bot' 
+      }]);
     } finally {
       setIsBotTyping(false);
     }
   };
 
   const greeting = currentTime.getHours() < 12 ? 'Good Morning' : currentTime.getHours() < 18 ? 'Good Afternoon' : 'Good Evening';
-  const total = employees.length;
   const pctPresent = total > 0 ? (todayStats.present / total) * 100 : 0;
   const pctLeave = total > 0 ? (todayStats.leave / total) * 100 : 0;
   const pctAbsent = total > 0 ? (todayStats.absent / total) * 100 : 0;
@@ -390,17 +422,10 @@ export default function Dashboard({ employees }) {
       <div className="fixed bottom-6 right-6 z-50 print:hidden flex flex-col items-end">
         {isChatOpen && (
           <div className="w-80 h-96 bg-white border border-slate-200 rounded-3xl shadow-2xl mb-4 flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 duration-300">
-            <div className="bg-indigo-600 p-4 flex justify-between items-center text-white">
+            <div className="bg-[#5538ff] p-4 flex justify-between items-center text-white">
               <div className="flex items-center gap-3">
-                {/* CUSTOM CHATBOT PHOTO LOGIC HERE */}
-                <div className="w-10 h-10 rounded-full bg-white/10 p-0.5 flex items-center justify-center overflow-hidden border-2 border-indigo-400 relative">
-                  <img 
-                     src="jahsbots-removebg-preview.png" 
-                     alt="Bot" 
-                     className="w-full h-full object-cover z-10 relative" 
-                     onError={(e) => { e.target.onerror = null; e.target.style.display = 'none'; }} 
-                  />
-                  <Bot size={20} className="absolute z-0 opacity-50 text-white" />
+                <div className="w-10 h-10 rounded-full bg-white p-1.5 flex items-center justify-center overflow-hidden border border-indigo-200 relative">
+                  <img src="/jahsbots-removebg-preview.png" alt="Bot Icon" className="h-6" />
                 </div>
                 <div>
                   <h4 className="text-sm font-black tracking-tight leading-none">JAHS Assistant</h4>
@@ -413,25 +438,20 @@ export default function Dashboard({ employees }) {
             <div className="flex-1 p-4 overflow-y-auto flex flex-col gap-4 bg-slate-50">
               {messages.map(msg => (
                 <div key={msg.id} className={`flex gap-2 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  
-                  {/* Avatar next to bot messages */}
                   {msg.sender === 'bot' && (
-                    <div className="w-6 h-6 rounded-full bg-indigo-100 flex-shrink-0 flex items-center justify-center overflow-hidden border border-indigo-200 relative mt-1">
-                      <img src="/chatbot.png" alt="Bot" className="w-full h-full object-cover z-10 relative" onError={(e) => { e.target.onerror = null; e.target.style.display = 'none'; }} />
-                      <Bot size={12} className="absolute z-0 text-indigo-400" />
+                    <div className="bg-white border border-slate-200 rounded-full h-8 w-8 flex items-center justify-center flex-shrink-0 relative overflow-hidden mt-1 p-1">
+                       <img src="/jahsbots-removebg-preview.png" alt="Bot Avatar" className="h-6" />
                     </div>
                   )}
-
-                  <div className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm whitespace-pre-wrap ${msg.sender === 'user' ? 'bg-indigo-600 text-white rounded-br-none shadow-md' : 'bg-white text-slate-800 border border-slate-200 rounded-bl-none shadow-sm'}`}>
+                  <div className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm whitespace-pre-wrap ${msg.sender === 'user' ? 'bg-[#5538ff] text-white rounded-br-none shadow-md' : 'bg-white text-slate-800 border border-slate-200 rounded-bl-none shadow-sm'}`}>
                     {msg.text}
                   </div>
                 </div>
               ))}
               {isBotTyping && (
                 <div className="flex justify-start gap-2">
-                  <div className="w-6 h-6 rounded-full bg-indigo-100 flex-shrink-0 flex items-center justify-center overflow-hidden border border-indigo-200 relative mt-1">
-                    <img src="/chatbot.png" alt="Bot" className="w-full h-full object-cover z-10 relative" onError={(e) => { e.target.onerror = null; e.target.style.display = 'none'; }} />
-                    <Bot size={12} className="absolute z-0 text-indigo-400" />
+                  <div className="bg-white border border-slate-200 rounded-full h-8 w-8 flex items-center justify-center flex-shrink-0 relative overflow-hidden p-1 mt-1">
+                     <img src="/jahsbots-removebg-preview.png" alt="Bot Typing" className="h-6" />
                   </div>
                   <div className="bg-white border border-slate-200 rounded-2xl rounded-bl-none px-4 py-3 flex gap-1 shadow-sm h-8 items-center">
                     <span className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-bounce"></span>
@@ -451,7 +471,7 @@ export default function Dashboard({ employees }) {
                 placeholder="Ask about operations..." 
                 className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none focus:border-indigo-500 transition-colors"
               />
-              <button type="submit" disabled={!chatInput.trim() || isBotTyping} className="bg-indigo-600 text-white p-2 rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors">
+              <button type="submit" disabled={!chatInput.trim() || isBotTyping} className="bg-[#5538ff] text-white p-2 rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors">
                 <Send size={18} />
               </button>
             </form>
@@ -460,9 +480,9 @@ export default function Dashboard({ employees }) {
 
         <button 
           onClick={() => setIsChatOpen(!isChatOpen)}
-          className={`p-4 rounded-full shadow-2xl shadow-indigo-300/50 transition-all duration-300 hover:scale-110 active:scale-95 flex items-center justify-center ${isChatOpen ? 'bg-rose-500 text-white' : 'bg-indigo-600 text-white'}`}
+          className={`p-4 rounded-full shadow-2xl transition-all duration-300 hover:scale-110 active:scale-95 flex items-center justify-center ${isChatOpen ? 'bg-rose-500 text-white shadow-rose-300/50' : 'bg-[#5538ff] text-white shadow-indigo-400/50'}`}
         >
-          {isChatOpen ? <X size={24} /> : <MessageSquare size={24} />}
+          {isChatOpen ? <X size={28} /> : <MessageSquare size={28} />}
         </button>
       </div>
 
