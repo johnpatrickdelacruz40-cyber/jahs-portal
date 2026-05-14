@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { 
   Users, CheckCircle2, XCircle, Clock, 
-  Activity, Video, Radio, PieChart, X, User, Printer, Coffee, BarChart3,
-  Search, MapPin, Wind, CloudRain, Sun, CloudLightning, AlertTriangle, ShieldCheck,
+  Activity, Video, PieChart, X, User, Printer, Coffee, BarChart3,
+  Search, MapPin, Navigation, ExternalLink,
   MessageSquare, Send, Bot
 } from 'lucide-react';
 
@@ -14,16 +14,6 @@ const getDBDateStr = (dateObj) => {
   return `${year}-${month}-${day}`;
 };
 
-const getWeatherStatus = (code) => {
-  if (code === 0) return { label: 'Clear Sky', icon: Sun };
-  if (code >= 1 && code <= 3) return { label: 'Cloudy', icon: Sun }; 
-  if (code >= 45 && code <= 48) return { label: 'Foggy', icon: Wind };
-  if (code >= 51 && code <= 67) return { label: 'Raining', icon: CloudRain };
-  if (code >= 80 && code <= 82) return { label: 'Showers', icon: CloudRain };
-  if (code >= 95 && code <= 99) return { label: 'Thunderstorm', icon: CloudLightning };
-  return { label: 'Variable', icon: Sun };
-};
-
 export default function Dashboard({ employees }) {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [todayStats, setTodayStats] = useState({ present: 0, leave: 0, absent: 0 });
@@ -31,19 +21,20 @@ export default function Dashboard({ employees }) {
   const [activeList, setActiveList] = useState(null); 
   const [isLoading, setIsLoading] = useState(true);
 
-  // WEATHER STATE
-  const [searchCity, setSearchCity] = useState('');
+  // --- DEPLOYMENT ROUTER STATE ---
+  const COMPANY_LOCATION = "Brgy Balubad, Bulakan, Bulacan, Philippines";
+  const [searchSite, setSearchSite] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [weatherData, setWeatherData] = useState(null);
-  const [isWeatherLoading, setIsWeatherLoading] = useState(false);
+  const [selectedDestination, setSelectedDestination] = useState(null);
+  const [isSearching, setIsSearching] = useState(false);
 
-  // CHATBOT STATE
+  // --- SECURE CHATBOT STATE ---
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatInput, setChatInput] = useState('');
   const [isBotTyping, setIsBotTyping] = useState(false);
   const [messages, setMessages] = useState([
-    { id: 1, text: "Hello! I'm your JAHS System Assistant. How can I help you with operations today?", sender: 'bot' }
+    { id: 1, text: "Hello! I'm the JAHS Telecom Operations Assistant. How can I help you today?", sender: 'bot' }
   ]);
   const chatEndRef = useRef(null);
 
@@ -86,67 +77,102 @@ export default function Dashboard({ employees }) {
     else setIsLoading(false);
   }, [employees]);
 
-  // 3. WEATHER AUTOCOMPLETE
+  // 3. AUTOCOMPLETE SEARCH FOR DEPLOYMENT SITES (Philippines Only)
   useEffect(() => {
-    if (searchCity.trim().length < 2) {
-      setSuggestions([]); return;
+    if (searchSite.trim().length < 2) {
+      setSuggestions([]);
+      return;
     }
+    
+    setIsSearching(true);
     const delayDebounceFn = setTimeout(async () => {
       try {
-        const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${searchCity}&count=20&language=en&format=json`);
+        const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${searchSite}&count=20&language=en&format=json`);
         const data = await res.json();
+        
         if (data.results) {
           let localResults = data.results.filter(loc => loc.country_code === 'PH');
           localResults = localResults.filter((v, i, a) => a.findIndex(t => (t.name === v.name && t.admin1 === v.admin1)) === i);
           setSuggestions(localResults.slice(0, 5));
-        } else setSuggestions([]);
+        } else {
+          setSuggestions([]);
+        }
       } catch (err) { console.error(err); }
+      setIsSearching(false);
     }, 300);
-    return () => clearTimeout(delayDebounceFn);
-  }, [searchCity]);
 
-  const fetchWeatherExact = async (lat, lon, locationName) => {
-    setIsWeatherLoading(true); setShowSuggestions(false); setSearchCity(locationName); 
-    try {
-      const wRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max&timezone=Asia%2FSingapore`);
-      const wData = await wRes.json();
-      setWeatherData({ name: locationName, current: wData.current, daily: wData.daily });
-    } catch (err) { console.error(err); }
-    setIsWeatherLoading(false);
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchSite]);
+
+  const handleSelectSite = (site) => {
+    const province = site.admin2 ? site.admin2.replace('Province of ', '').replace(' (capital)', '') : '';
+    const fullLocation = `${site.name}${province && province !== site.name ? `, ${province}` : ''}, Philippines`;
+    
+    setSearchSite(fullLocation);
+    setSelectedDestination(fullLocation);
+    setShowSuggestions(false);
   };
 
-  useEffect(() => { fetchWeatherExact(14.8433, 120.8114, 'Malolos, Bulacan'); }, []);
-
-  // --- CHATBOT LOGIC ---
+  // 4. SECURE CHATBOT LOGIC
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, isBotTyping]);
 
-  const handleSendMessage = (e) => {
+  const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!chatInput.trim()) return;
 
-    const newMsg = { id: Date.now(), text: chatInput, sender: 'user' };
+    const userText = chatInput;
+    const newMsg = { id: Date.now(), text: userText, sender: 'user' };
     setMessages(prev => [...prev, newMsg]);
     setChatInput('');
     setIsBotTyping(true);
 
-    // Simulated Smart Responses
-    setTimeout(() => {
-      const lowerInput = newMsg.text.toLowerCase();
-      let botReply = "I am currently in beta! Soon, I will be connected to a full AI to help you manage the JAHS system.";
+    try {
+      const systemPrompt = `You are the JAHS Telecom Operations Assistant. You are professional, brief, and helpful. 
+      You only answer questions about:
+      - Payroll cutoffs (10th and 25th)
+      - Overtime rules
+      - Telecom in the Philippines
+      - Employees here and attendance
+      - Weeks and deployment safety. 
       
-      if (lowerInput.includes('cutoff') || lowerInput.includes('payroll')) {
-        botReply = "Payroll cutoffs are on the 10th and 25th of the month. Make sure to finalize all Overtime logs at least 2 days prior!";
-      } else if (lowerInput.includes('deploy') || lowerInput.includes('weather') || lowerInput.includes('safe')) {
-        botReply = "You can use the Dispatch Radar on the dashboard. It will automatically throw a Red Alert if wind speeds exceed 40km/h or if there is lightning.";
-      } else if (lowerInput.includes('overtime') || lowerInput.includes('ot')) {
-        botReply = "To add Overtime, go to 'Daily Attendance', expand an employee's profile, and type directly into the Interactive DTR Editor. It will sync with their profile immediately.";
+      STRICT GUARDRAILS: 
+      If asked about anything else, politely decline. 
+      You MUST POLITELY DECLINE if they ask about any security information, admin details, passwords, database architecture, or private data. Maintain the privacy of the system at all costs.`;
+
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY; 
+      
+      if (!apiKey) {
+        setMessages(prev => [...prev, { id: Date.now() + 1, text: "API Key is missing. Please add VITE_GEMINI_API_KEY to your .env file.", sender: 'bot' }]);
+        setIsBotTyping(false);
+        return;
+      }
+
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [
+            { role: "user", parts: [{ text: systemPrompt + "\n\nUser Question: " + userText }] }
+          ]
+        })
+      });
+
+      const data = await response.json();
+      
+      let botReply = "I am sorry, I am having trouble connecting to the JAHS server.";
+      if (data.candidates && data.candidates[0].content.parts[0].text) {
+        botReply = data.candidates[0].content.parts[0].text;
       }
 
       setMessages(prev => [...prev, { id: Date.now() + 1, text: botReply, sender: 'bot' }]);
-      setIsBotTyping(false);
-    }, 1200);
-  };
 
+    } catch (error) {
+      console.error("Chatbot Error:", error);
+      setMessages(prev => [...prev, { id: Date.now() + 1, text: "Network error. Please ensure you have internet access.", sender: 'bot' }]);
+    } finally {
+      setIsBotTyping(false);
+    }
+  };
 
   const greeting = currentTime.getHours() < 12 ? 'Good Morning' : currentTime.getHours() < 18 ? 'Good Afternoon' : 'Good Evening';
   const total = employees.length;
@@ -160,14 +186,6 @@ export default function Dashboard({ employees }) {
     { day: 'Mon', percent: 95 }, { day: 'Tue', percent: 88 }, { day: 'Wed', percent: pctPresent > 0 ? Math.round(pctPresent) : 0 },
     { day: 'Thu', percent: 0 }, { day: 'Fri', percent: 0 }, { day: 'Sat', percent: 0 },
   ];
-
-  let deploymentStatus = { color: 'bg-emerald-100 text-emerald-700 border-emerald-200', icon: ShieldCheck, title: 'Safe for Deployment', msg: 'Clear for tower climbing and site installation.' };
-  if (weatherData) {
-    const wind = weatherData.current.wind_speed_10m; const code = weatherData.current.weather_code;
-    if (code >= 95) deploymentStatus = { color: 'bg-rose-100 text-rose-700 border-rose-200', icon: AlertTriangle, title: 'RED ALERT: Suspend Ops', msg: 'Lightning detected. All tower and outdoor operations halted.' };
-    else if (wind > 40) deploymentStatus = { color: 'bg-rose-100 text-rose-700 border-rose-200', icon: Wind, title: 'DANGER: High Winds', msg: `Wind at ${wind}km/h. Tower climbing is strictly prohibited.` };
-    else if (code >= 51 && code <= 82) deploymentStatus = { color: 'bg-amber-100 text-amber-700 border-amber-200', icon: CloudRain, title: 'CAUTION: Ground Ops Only', msg: 'Wet conditions. Slippery towers. Indoor/Cabinet splicing only.' };
-  }
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700 pb-10 flex flex-col min-h-full relative">
@@ -243,28 +261,45 @@ export default function Dashboard({ employees }) {
               <div className="relative w-full h-40 rounded-[1.5rem] overflow-hidden bg-slate-900 border border-slate-800"><video autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover opacity-80"><source src="/bg-video.mp4" type="video/mp4" /></video></div>
             </div>
 
-            {/* --- FIELD DISPATCH RADAR --- */}
+            {/* --- SITE DEPLOYMENT ROUTER --- */}
             <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-8 flex-1 flex flex-col relative z-20">
-              <div className="flex justify-between items-start mb-6"><h3 className="text-lg font-black tracking-tight text-slate-900 uppercase flex items-center gap-2"><MapPin size={18} className="text-indigo-500" /> Dispatch Radar</h3></div>
+              
+              <div className="flex justify-between items-start mb-6">
+                <div>
+                  <h3 className="text-lg font-black tracking-tight text-slate-900 uppercase flex items-center gap-2"><Navigation size={18} className="text-indigo-500" /> Deployment Router</h3>
+                  <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest flex items-center gap-1">From <MapPin size={10}/> Bulakan HQ</p>
+                </div>
+              </div>
+
+              {/* Destination Search Bar */}
               <div className="relative mb-6">
                 <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input 
                   type="text" 
-                  value={searchCity} 
-                  onChange={(e) => { setSearchCity(e.target.value); setShowSuggestions(true); }} 
-                  onFocus={() => { if(searchCity.length >= 2) setShowSuggestions(true); }}
-                  placeholder="Search City or Province..." 
+                  value={searchSite} 
+                  onChange={(e) => { setSearchSite(e.target.value); setShowSuggestions(true); setSelectedDestination(null); }} 
+                  onFocus={() => { if(searchSite.length >= 2) setShowSuggestions(true); }}
+                  placeholder="Enter Deployment Destination..." 
                   className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/20"
                 />
+                
                 {showSuggestions && suggestions.length > 0 && (
                   <div className="absolute top-full left-0 w-full mt-2 bg-white border border-slate-100 rounded-2xl shadow-2xl overflow-hidden z-50">
                     {suggestions.map((s, i) => {
                       const province = s.admin2 ? s.admin2.replace('Province of ', '').replace(' (capital)', '') : '';
                       const region = s.admin1 ? s.admin1 : '';
                       return (
-                        <div key={i} onClick={() => fetchWeatherExact(s.latitude, s.longitude, `${s.name}${province && province !== s.name ? `, ${province}` : ''}`)} className="px-5 py-3 hover:bg-slate-50 cursor-pointer flex flex-col border-b border-slate-50 last:border-0 transition-colors">
-                          <span className="font-bold text-slate-900 text-sm leading-none">{s.name}{province && province !== s.name ? `, ${province}` : ''}</span>
-                          <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1">{region ? `${region}, ` : ''}{s.country}</span>
+                        <div 
+                          key={i}
+                          onClick={() => handleSelectSite(s)}
+                          className="px-5 py-3 hover:bg-slate-50 cursor-pointer flex flex-col border-b border-slate-50 last:border-0 transition-colors"
+                        >
+                          <span className="font-bold text-slate-900 text-sm leading-none">
+                            {s.name}{province && province !== s.name ? `, ${province}` : ''}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1">
+                            {region ? `${region}, ` : ''}{s.country}
+                          </span>
                         </div>
                       )
                     })}
@@ -272,66 +307,103 @@ export default function Dashboard({ employees }) {
                 )}
               </div>
 
-              {isWeatherLoading ? (
-                <div className="flex-1 flex items-center justify-center text-slate-400 text-xs font-bold uppercase tracking-widest animate-pulse">Scanning Atmosphere...</div>
-              ) : weatherData ? (
-                <div className="flex flex-col gap-4">
-                  <div className="flex justify-between items-center bg-slate-900 text-white p-5 rounded-3xl shadow-lg">
-                    <div className="overflow-hidden">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-indigo-300 truncate pr-2">{weatherData.name}</p>
-                      <h4 className="text-3xl font-black mt-1 leading-none">{Math.round(weatherData.current.temperature_2m)}°C</h4>
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      {React.createElement(getWeatherStatus(weatherData.current.weather_code).icon, { size: 28, className: "text-indigo-300 ml-auto mb-1" })}
-                      <p className="text-[10px] font-bold uppercase tracking-wider">{getWeatherStatus(weatherData.current.weather_code).label}</p>
-                    </div>
+              {selectedDestination ? (
+                <div className="flex flex-col flex-1">
+                  <div className="w-full h-48 bg-slate-100 rounded-2xl border border-slate-200 overflow-hidden relative mb-4">
+                    <iframe 
+                      width="100%" 
+                      height="100%" 
+                      frameBorder="0" 
+                      style={{ border: 0 }}
+                      src={`https://maps.google.com/maps?saddr=${encodeURIComponent(COMPANY_LOCATION)}&daddr=${encodeURIComponent(selectedDestination)}&output=embed`}
+                      allowFullScreen
+                    ></iframe>
                   </div>
-                  <div className={`p-4 rounded-2xl border-2 flex gap-3 ${deploymentStatus.color}`}>
-                    <deploymentStatus.icon size={24} className="flex-shrink-0 mt-0.5" />
-                    <div><p className="text-xs font-black uppercase tracking-wider leading-none">{deploymentStatus.title}</p><p className="text-[10px] font-bold mt-1 opacity-90 leading-tight">{deploymentStatus.msg}</p></div>
-                  </div>
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-2 border-t border-slate-100 pt-4">3-Day Forecast</p>
-                  <div className="flex justify-between gap-2">
-                    {weatherData.daily.time.slice(1, 4).map((dateStr, i) => {
-                      const d = new Date(dateStr); const maxT = weatherData.daily.temperature_2m_max[i + 1]; const code = weatherData.daily.weather_code[i + 1]; const status = getWeatherStatus(code);
-                      return (
-                        <div key={i} className="flex-1 bg-slate-50 border border-slate-100 rounded-xl py-3 flex flex-col items-center justify-center gap-1">
-                          <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest">{d.toLocaleDateString('en-US', { weekday: 'short' })}</p>
-                          <status.icon size={16} className="text-slate-600 my-1" />
-                          <p className="text-xs font-black text-slate-900">{Math.round(maxT)}°</p>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <a 
+                    href={`https://maps.google.com/maps?saddr=${encodeURIComponent(COMPANY_LOCATION)}&daddr=${encodeURIComponent(selectedDestination)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-auto w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors shadow-lg shadow-indigo-200"
+                  >
+                    Launch Live Navigation <ExternalLink size={14}/>
+                  </a>
                 </div>
-              ) : <div className="flex-1 flex items-center justify-center text-rose-500 text-xs font-bold uppercase tracking-widest">Radar Offline</div>}
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center text-slate-400 opacity-60">
+                  <Navigation size={32} className="mb-2 opacity-50" />
+                  <p className="text-[10px] font-black uppercase tracking-widest text-center">Awaiting Destination<br/>Type a city to calculate route</p>
+                </div>
+              )}
+
             </div>
           </div>
         </div>
+
+        <div className="mt-8 pt-4 flex flex-col md:flex-row justify-between items-center text-slate-400 gap-4 px-4">
+           <p className="text-[10px] font-black uppercase tracking-[0.2em]">JAHS Electronic and Electrical Service</p>
+           <div className="text-[11px] font-bold tracking-wide text-center md:text-right border border-slate-200 bg-white px-6 py-3 rounded-full shadow-sm">System Engineered & Developed by <span className="text-indigo-600 font-black mx-1">John Patrick DC. Dela Cruz</span> <span className="opacity-40">| © 2026</span></div>
+        </div>
       </div>
 
-      {/* --- FLOATING CHATBOT WIDGET --- */}
+      {/* --- MODAL --- */}
+      {activeList && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200 print:bg-white print:p-0 print:block">
+          <div className="bg-white rounded-[2rem] w-full max-w-md shadow-2xl border border-slate-100 flex flex-col max-h-[80vh] animate-in zoom-in-95 duration-200 print:shadow-none print:border-none print:max-w-none print:h-auto print:max-h-none">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center print:border-black print:pb-4">
+               <div>
+                 <h3 className={`text-xl font-black uppercase tracking-tight print:text-black ${activeList === 'present' ? 'text-emerald-700' : activeList === 'leave' ? 'text-amber-700' : 'text-rose-700'}`}>
+                   {activeList === 'present' ? 'Present Today' : activeList === 'leave' ? 'On Official Leave' : 'No Work Today'}
+                 </h3>
+                 <p className="text-xs font-bold text-slate-400 mt-1 print:text-black">
+                   {currentTime.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} • {detailedStats[activeList].length} Personnel
+                 </p>
+               </div>
+               <div className="flex items-center gap-2 print:hidden">
+                 <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-colors"><Printer size={14}/> Print</button>
+                 <button onClick={() => setActiveList(null)} className="p-2 hover:bg-slate-100 text-slate-400 hover:text-slate-900 rounded-xl transition-colors"><X size={20} /></button>
+               </div>
+            </div>
+            <div className="p-4 overflow-y-auto flex flex-col gap-2 flex-1 print:overflow-visible print:p-0 print:mt-4">
+              {detailedStats[activeList].length === 0 ? (
+                 <div className="text-center py-10 text-slate-400 font-bold text-xs uppercase tracking-widest">No personnel found.</div>
+              ) : (
+                 detailedStats[activeList].map((emp, i) => (
+                   <div key={emp.id} className="flex items-center gap-4 p-3 hover:bg-slate-50 rounded-2xl border border-transparent hover:border-slate-100 print:border-b print:border-slate-300 print:rounded-none">
+                     <div className="w-10 h-10 rounded-xl bg-slate-100 overflow-hidden border border-slate-200 p-0.5 flex-shrink-0 print:hidden">
+                       {emp.photo ? <img src={emp.photo} className="w-full h-full object-cover rounded-lg" /> : <User className="m-auto h-full text-slate-300" size={16} />}
+                     </div>
+                     <span className="hidden print:block font-mono text-sm mr-2">{i + 1}.</span>
+                     <div className="overflow-hidden">
+                       <p className="font-bold text-slate-900 text-sm truncate print:text-base">{emp.name}</p>
+                       <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 print:text-black">{emp.idNo}</p>
+                     </div>
+                   </div>
+                 ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- SECURE FLOATING CHATBOT WIDGET --- */}
       <div className="fixed bottom-6 right-6 z-50 print:hidden flex flex-col items-end">
-        {/* Chat Window */}
         {isChatOpen && (
           <div className="w-80 h-96 bg-white border border-slate-200 rounded-3xl shadow-2xl mb-4 flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 duration-300">
-            {/* Chat Header */}
             <div className="bg-indigo-600 p-4 flex justify-between items-center text-white">
               <div className="flex items-center gap-2">
                 <div className="bg-white/20 p-1.5 rounded-lg"><Bot size={18} /></div>
                 <div>
                   <h4 className="text-sm font-black tracking-tight leading-none">JAHS Assistant</h4>
-                  <p className="text-[9px] text-indigo-200 uppercase tracking-widest mt-0.5">Online</p>
+                  <p className="text-[9px] text-indigo-200 uppercase tracking-widest mt-0.5">Protected AI</p>
                 </div>
               </div>
               <button onClick={() => setIsChatOpen(false)} className="text-indigo-200 hover:text-white transition-colors"><X size={20}/></button>
             </div>
 
-            {/* Chat Messages */}
             <div className="flex-1 p-4 overflow-y-auto flex flex-col gap-4 bg-slate-50">
               {messages.map(msg => (
                 <div key={msg.id} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm ${msg.sender === 'user' ? 'bg-indigo-600 text-white rounded-br-none shadow-md' : 'bg-white text-slate-800 border border-slate-200 rounded-bl-none shadow-sm'}`}>
+                  <div className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm whitespace-pre-wrap ${msg.sender === 'user' ? 'bg-indigo-600 text-white rounded-br-none shadow-md' : 'bg-white text-slate-800 border border-slate-200 rounded-bl-none shadow-sm'}`}>
                     {msg.text}
                   </div>
                 </div>
@@ -348,26 +420,24 @@ export default function Dashboard({ employees }) {
               <div ref={chatEndRef} />
             </div>
 
-            {/* Chat Input */}
             <form onSubmit={handleSendMessage} className="p-3 bg-white border-t border-slate-100 flex gap-2">
               <input 
                 type="text" 
                 value={chatInput} 
                 onChange={(e) => setChatInput(e.target.value)}
-                placeholder="Ask a question..." 
+                placeholder="Ask about operations..." 
                 className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none focus:border-indigo-500 transition-colors"
               />
-              <button type="submit" disabled={!chatInput.trim()} className="bg-indigo-600 text-white p-2 rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors">
+              <button type="submit" disabled={!chatInput.trim() || isBotTyping} className="bg-indigo-600 text-white p-2 rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors">
                 <Send size={18} />
               </button>
             </form>
           </div>
         )}
 
-        {/* Floating Button */}
         <button 
           onClick={() => setIsChatOpen(!isChatOpen)}
-          className={`p-4 rounded-full shadow-2xl shadow-indigo-300/50 transition-all duration-300 hover:scale-110 active:scale-95 ${isChatOpen ? 'bg-rose-500 text-white' : 'bg-indigo-600 text-white'}`}
+          className={`p-4 rounded-full shadow-2xl shadow-indigo-300/50 transition-all duration-300 hover:scale-110 active:scale-95 flex items-center justify-center ${isChatOpen ? 'bg-rose-500 text-white' : 'bg-indigo-600 text-white'}`}
         >
           {isChatOpen ? <X size={24} /> : <MessageSquare size={24} />}
         </button>
