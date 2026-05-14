@@ -77,7 +77,7 @@ export default function Dashboard({ employees }) {
     else setIsLoading(false);
   }, [employees]);
 
-  // 3. AUTOCOMPLETE SEARCH FOR DEPLOYMENT SITES (Philippines Only)
+  // 3. AUTOCOMPLETE SEARCH FOR DEPLOYMENT SITES
   useEffect(() => {
     if (searchSite.trim().length < 2) {
       setSuggestions([]);
@@ -113,7 +113,7 @@ export default function Dashboard({ employees }) {
     setShowSuggestions(false);
   };
 
-  // 4. SECURE CHATBOT LOGIC
+  // 4. SECURE CHATBOT LOGIC (FIXED 404 ERROR)
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, isBotTyping]);
 
   const handleSendMessage = async (e) => {
@@ -147,7 +147,8 @@ export default function Dashboard({ employees }) {
         return;
       }
 
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`, {
+      // FIXED: Changed endpoint to gemini-1.5-flash to resolve 404 Error
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -320,7 +321,7 @@ export default function Dashboard({ employees }) {
                     ></iframe>
                   </div>
                   <a 
-                    href={`https://maps.google.com/maps?saddr=${encodeURIComponent(COMPANY_LOCATION)}&daddr=${encodeURIComponent(selectedDestination)}`}
+                    href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(COMPANY_LOCATION)}&destination=${encodeURIComponent(selectedDestination)}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="mt-auto w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors shadow-lg shadow-indigo-200"
@@ -390,8 +391,17 @@ export default function Dashboard({ employees }) {
         {isChatOpen && (
           <div className="w-80 h-96 bg-white border border-slate-200 rounded-3xl shadow-2xl mb-4 flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 duration-300">
             <div className="bg-indigo-600 p-4 flex justify-between items-center text-white">
-              <div className="flex items-center gap-2">
-                <div className="bg-white/20 p-1.5 rounded-lg"><Bot size={18} /></div>
+              <div className="flex items-center gap-3">
+                {/* CUSTOM CHATBOT PHOTO LOGIC HERE */}
+                <div className="w-10 h-10 rounded-full bg-white/10 p-0.5 flex items-center justify-center overflow-hidden border-2 border-indigo-400 relative">
+                  <img 
+                     src="jahsbots-removebg-preview.png" 
+                     alt="Bot" 
+                     className="w-full h-full object-cover z-10 relative" 
+                     onError={(e) => { e.target.onerror = null; e.target.style.display = 'none'; }} 
+                  />
+                  <Bot size={20} className="absolute z-0 opacity-50 text-white" />
+                </div>
                 <div>
                   <h4 className="text-sm font-black tracking-tight leading-none">JAHS Assistant</h4>
                   <p className="text-[9px] text-indigo-200 uppercase tracking-widest mt-0.5">Protected AI</p>
@@ -402,15 +412,28 @@ export default function Dashboard({ employees }) {
 
             <div className="flex-1 p-4 overflow-y-auto flex flex-col gap-4 bg-slate-50">
               {messages.map(msg => (
-                <div key={msg.id} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div key={msg.id} className={`flex gap-2 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  
+                  {/* Avatar next to bot messages */}
+                  {msg.sender === 'bot' && (
+                    <div className="w-6 h-6 rounded-full bg-indigo-100 flex-shrink-0 flex items-center justify-center overflow-hidden border border-indigo-200 relative mt-1">
+                      <img src="/chatbot.png" alt="Bot" className="w-full h-full object-cover z-10 relative" onError={(e) => { e.target.onerror = null; e.target.style.display = 'none'; }} />
+                      <Bot size={12} className="absolute z-0 text-indigo-400" />
+                    </div>
+                  )}
+
                   <div className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm whitespace-pre-wrap ${msg.sender === 'user' ? 'bg-indigo-600 text-white rounded-br-none shadow-md' : 'bg-white text-slate-800 border border-slate-200 rounded-bl-none shadow-sm'}`}>
                     {msg.text}
                   </div>
                 </div>
               ))}
               {isBotTyping && (
-                <div className="flex justify-start">
-                  <div className="bg-white border border-slate-200 rounded-2xl rounded-bl-none px-4 py-3 flex gap-1 shadow-sm">
+                <div className="flex justify-start gap-2">
+                  <div className="w-6 h-6 rounded-full bg-indigo-100 flex-shrink-0 flex items-center justify-center overflow-hidden border border-indigo-200 relative mt-1">
+                    <img src="/chatbot.png" alt="Bot" className="w-full h-full object-cover z-10 relative" onError={(e) => { e.target.onerror = null; e.target.style.display = 'none'; }} />
+                    <Bot size={12} className="absolute z-0 text-indigo-400" />
+                  </div>
+                  <div className="bg-white border border-slate-200 rounded-2xl rounded-bl-none px-4 py-3 flex gap-1 shadow-sm h-8 items-center">
                     <span className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-bounce"></span>
                     <span className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></span>
                     <span className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></span>
