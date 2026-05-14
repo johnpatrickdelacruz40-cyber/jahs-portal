@@ -12,11 +12,8 @@ const getDBDateStr = (dateObj) => {
 export default function EmployeeProfiles({ employees }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [viewDate, setViewDate] = useState(new Date());
-  
-  // These two states hold the data fetched from Supabase
   const [attendanceLogs, setAttendanceLogs] = useState({});
-  const [dtrDetails, setDtrDetails] = useState({}); // This holds the OT and Activity!
-  
+  const [dtrDetails, setDtrDetails] = useState({}); 
   const [expandedId, setExpandedId] = useState(null);
 
   const handlePrevCutoff = () => { const d = new Date(viewDate); d.setDate(d.getDate() - 15); setViewDate(d); };
@@ -36,7 +33,6 @@ export default function EmployeeProfiles({ employees }) {
     if (d.getDay() !== 0) cutoffDays.push(new Date(d)); d.setDate(d.getDate() + 1); 
   }
 
-  // --- FETCH FROM DATABASE ---
   const fetchLogs = async () => {
     const { data } = await supabase.from('attendance_logs').select('*');
     const mappedStatus = {};
@@ -45,8 +41,6 @@ export default function EmployeeProfiles({ employees }) {
     data?.forEach(log => {
       const key = `${log.employee_id}-${log.log_date}`;
       mappedStatus[key] = log.status;
-      
-      // We grab the specific Admin edits right here
       mappedDetails[key] = {
         timeIn: log.time_in,
         timeOut: log.time_out,
@@ -54,15 +48,13 @@ export default function EmployeeProfiles({ employees }) {
       };
     });
     setAttendanceLogs(mappedStatus);
-    setDtrDetails(mappedDetails); // Store them to display on the paper
+    setDtrDetails(mappedDetails);
   };
 
   useEffect(() => { fetchLogs(); }, [viewDate]);
 
   return (
     <div className="h-full">
-      
-      {/* SCREEN UI */}
       <div className="space-y-8 animate-in fade-in duration-700 print:hidden">
          <div className="flex flex-col md:flex-row justify-between items-end gap-6">
            <div className="space-y-2">
@@ -79,7 +71,6 @@ export default function EmployeeProfiles({ employees }) {
            </div>
          </div>
 
-         {/* EMPLOYEE LIST */}
          <div className="grid grid-cols-1 gap-6">
             {employees.filter(e => e.name.toLowerCase().includes(searchTerm.toLowerCase())).map(emp => {
               const isExpanded = expandedId === emp.id;
@@ -110,7 +101,6 @@ export default function EmployeeProfiles({ employees }) {
                       </div>
                    </div>
 
-                   {/* PUBLIC DTR PREVIEW (READ ONLY) */}
                    {isExpanded && (
                      <div className="border-t border-slate-100 bg-slate-50 animate-in slide-in-from-top-2">
                         
@@ -119,7 +109,7 @@ export default function EmployeeProfiles({ employees }) {
                             <FileText size={18} className="text-indigo-600" />
                             <div>
                               <p className="font-bold text-slate-900 text-sm">Standard DTR View</p>
-                              <p className="text-[10px] text-slate-400 uppercase tracking-widest font-black mt-0.5">Read-only system records (Synced with Admin Edits)</p>
+                              <p className="text-[10px] text-slate-400 uppercase tracking-widest font-black mt-0.5">Read-only system records</p>
                             </div>
                           </div>
                           <button onClick={() => window.print()} className="flex items-center gap-2 px-8 py-4 bg-slate-900 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl hover:shadow-2xl">
@@ -161,14 +151,11 @@ export default function EmployeeProfiles({ employees }) {
                                   const dbDate = getDBDateStr(date);
                                   const isFuture = dbDate > getDBDateStr(new Date()); 
                                   const status = isFuture ? null : attendanceLogs[`${emp.id}-${dbDate}`];
-                                  
-                                  // --- THE MAGIC HAPPENS HERE ---
-                                  // It pulls the exact Overtime strings the admin saved
                                   const details = dtrDetails[`${emp.id}-${dbDate}`] || {};
                                   
-                                  let dIn = details.timeIn ? details.timeIn : (status === 'present' ? '08:00 AM' : '-');
-                                  let dOut = details.timeOut ? details.timeOut : (status === 'present' ? '05:00 PM' : '-');
-                                  let dAct = details.activity ? details.activity : (status === 'leave' ? 'OFFICIAL LEAVE' : (status === 'absent' ? 'NO WORK' : '-'));
+                                  let dIn = details.timeIn ?? (status === 'present' ? '08:00 AM' : '-');
+                                  let dOut = details.timeOut ?? (status === 'present' ? '05:00 PM' : '-');
+                                  let dAct = details.activity ?? (status === 'leave' ? 'OFFICIAL LEAVE' : (status === 'absent' ? 'NO WORK' : '-'));
                                   let rowStyle = (status === 'leave' || status === 'absent') ? "text-gray-500 bg-gray-50" : "";
 
                                   return (
@@ -250,13 +237,11 @@ export default function EmployeeProfiles({ employees }) {
                       const dbDate = getDBDateStr(date);
                       const isFuture = dbDate > getDBDateStr(new Date()); 
                       const status = isFuture ? null : attendanceLogs[`${emp.id}-${dbDate}`];
-                      
-                      // --- READS THE ADMIN EDITS HERE TOO ---
                       const details = dtrDetails[`${emp.id}-${dbDate}`] || {};
                       
-                      let dIn = details.timeIn ? details.timeIn : (status === 'present' ? '08:00 AM' : '-');
-                      let dOut = details.timeOut ? details.timeOut : (status === 'present' ? '05:00 PM' : '-');
-                      let dAct = details.activity ? details.activity : (status === 'leave' ? 'OFFICIAL LEAVE' : (status === 'absent' ? 'NO WORK' : '-'));
+                      let dIn = details.timeIn ?? (status === 'present' ? '08:00 AM' : '-');
+                      let dOut = details.timeOut ?? (status === 'present' ? '05:00 PM' : '-');
+                      let dAct = details.activity ?? (status === 'leave' ? 'OFFICIAL LEAVE' : (status === 'absent' ? 'NO WORK' : '-'));
                       let rowStyle = (status === 'leave' || status === 'absent') ? "text-gray-500 bg-gray-50" : "";
 
                       return (

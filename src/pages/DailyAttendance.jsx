@@ -13,7 +13,7 @@ export default function DailyAttendance({ employees, logHistory }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedId, setExpandedId] = useState(null);
   const [attendanceData, setAttendanceData] = useState({});
-  const [dtrDetails, setDtrDetails] = useState({}); // Tracks OT and Activity edits
+  const [dtrDetails, setDtrDetails] = useState({}); 
   const [isSaving, setIsSaving] = useState(false);
   const [viewDate, setViewDate] = useState(new Date());
   
@@ -96,17 +96,17 @@ export default function DailyAttendance({ employees, logHistory }) {
            status = 'absent'; 
            logsToUpload.push({ 
              employee_id: empId, log_date: dbDate, status,
-             time_in: details.timeIn || '', 
-             time_out: details.timeOut || '', 
-             activity: details.activity || 'NO WORK'
+             time_in: details.timeIn ?? '', 
+             time_out: details.timeOut ?? '', 
+             activity: details.activity ?? 'NO WORK'
            });
         }
       } else {
         logsToUpload.push({ 
           employee_id: empId, log_date: dbDate, status,
-          time_in: details.timeIn || (status === 'present' ? '08:00 AM' : ''),
-          time_out: details.timeOut || (status === 'present' ? '05:00 PM' : ''),
-          activity: details.activity || (status === 'leave' ? 'OFFICIAL LEAVE' : (status === 'absent' ? 'NO WORK' : ''))
+          time_in: details.timeIn ?? (status === 'present' ? '08:00 AM' : ''),
+          time_out: details.timeOut ?? (status === 'present' ? '05:00 PM' : ''),
+          activity: details.activity ?? (status === 'leave' ? 'OFFICIAL LEAVE' : (status === 'absent' ? 'NO WORK' : ''))
         });
       }
     });
@@ -270,9 +270,9 @@ export default function DailyAttendance({ employees, logHistory }) {
                                       const status = attendanceData[`${emp.id}-${dbDate}`];
                                       const details = dtrDetails[`${emp.id}-${dbDate}`] || {};
                                       
-                                      let dIn = details.timeIn !== undefined ? details.timeIn : (status === 'present' ? '08:00 AM' : '');
-                                      let dOut = details.timeOut !== undefined ? details.timeOut : (status === 'present' ? '05:00 PM' : '');
-                                      let dAct = details.activity !== undefined ? details.activity : (status === 'leave' ? 'OFFICIAL LEAVE' : (status === 'absent' ? 'NO WORK' : ''));
+                                      let dIn = details.timeIn ?? (status === 'present' ? '08:00 AM' : '');
+                                      let dOut = details.timeOut ?? (status === 'present' ? '05:00 PM' : '');
+                                      let dAct = details.activity ?? (status === 'leave' ? 'OFFICIAL LEAVE' : (status === 'absent' ? 'NO WORK' : ''));
                                       let rowStyle = (status === 'leave' || status === 'absent') ? "text-gray-500 bg-gray-50" : "";
 
                                       return (
@@ -281,13 +281,13 @@ export default function DailyAttendance({ employees, logHistory }) {
                                             {date.toLocaleDateString('en-US', { month: 'short', day: '2-digit' })} ({date.toLocaleDateString('en-US', { weekday: 'short' })})
                                           </td>
                                           <td className="border border-black p-0">
-                                            <input type="text" value={dIn || ''} onChange={(e) => handleDetailChange(emp.id, dbDate, 'timeIn', e.target.value)} placeholder="-" className="w-full h-8 text-center outline-none bg-transparent font-mono text-[11px] uppercase focus:bg-indigo-100 hover:bg-slate-100 transition-colors placeholder:text-gray-300" />
+                                            <input type="text" value={dIn} onChange={(e) => handleDetailChange(emp.id, dbDate, 'timeIn', e.target.value)} placeholder="-" className="w-full h-8 text-center outline-none bg-transparent font-mono text-[11px] uppercase focus:bg-indigo-100 hover:bg-slate-100 transition-colors placeholder:text-gray-300" />
                                           </td>
                                           <td className="border border-black p-0">
-                                            <input type="text" value={dOut || ''} onChange={(e) => handleDetailChange(emp.id, dbDate, 'timeOut', e.target.value)} placeholder="-" className="w-full h-8 text-center outline-none bg-transparent font-mono text-[11px] uppercase focus:bg-indigo-100 hover:bg-slate-100 transition-colors placeholder:text-gray-300" />
+                                            <input type="text" value={dOut} onChange={(e) => handleDetailChange(emp.id, dbDate, 'timeOut', e.target.value)} placeholder="-" className="w-full h-8 text-center outline-none bg-transparent font-mono text-[11px] uppercase focus:bg-indigo-100 hover:bg-slate-100 transition-colors placeholder:text-gray-300" />
                                           </td>
                                           <td className="border border-black p-0">
-                                            <input type="text" value={dAct || ''} onChange={(e) => handleDetailChange(emp.id, dbDate, 'activity', e.target.value)} placeholder="-" className="w-full h-8 text-center outline-none bg-transparent font-bold text-[10px] uppercase focus:bg-indigo-100 hover:bg-slate-100 transition-colors placeholder:text-gray-300 px-2" />
+                                            <input type="text" value={dAct} onChange={(e) => handleDetailChange(emp.id, dbDate, 'activity', e.target.value)} placeholder="-" className="w-full h-8 text-center outline-none bg-transparent font-bold text-[10px] uppercase focus:bg-indigo-100 hover:bg-slate-100 transition-colors placeholder:text-gray-300 px-2" />
                                           </td>
                                         </tr>
                                       );
@@ -295,7 +295,6 @@ export default function DailyAttendance({ employees, logHistory }) {
                                   </tbody>
                                 </table>
 
-                                {/* --- EMPLOYEE SIGNATURE --- */}
                                 <div className="mt-12 flex flex-col gap-6 w-72 mx-auto text-[11px] text-center">
                                    <div className="w-full">
                                       <div className="border-b border-black w-full h-5 flex items-end justify-center pb-[2px]">
