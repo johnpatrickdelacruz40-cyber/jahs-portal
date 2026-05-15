@@ -4,7 +4,7 @@ import {
   Users, CheckCircle2, XCircle, Clock, 
   Activity, Video, PieChart, X, User, Printer, Coffee, BarChart3,
   Search, MapPin, Navigation, ExternalLink,
-  MessageSquare, Send, Bot
+  MessageSquare, Send, Bot, ChevronRight, ArrowLeft, ShieldAlert
 } from 'lucide-react';
 
 const getDBDateStr = (dateObj) => {
@@ -29,12 +29,12 @@ export default function Dashboard({ employees }) {
   const [selectedDestination, setSelectedDestination] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
 
-  // --- SECURE DYNAMIC CHATBOT STATE ---
+  // --- RULE-BASED CHATBOT STATE ---
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatInput, setChatInput] = useState('');
-  const [isBotTyping, setIsBotTyping] = useState(false);
+  const [currentCategory, setCurrentCategory] = useState(null); // Controls Sub-Menus
   const [messages, setMessages] = useState([
-    { id: 1, text: "Hello! I'm the JAHS Telecom Operations Assistant. How can I help you today?", sender: 'bot' }
+    { id: 1, text: "Hello! I'm the JAHS Telecom Assistant. Select a category below or type your question.", sender: 'bot' }
   ]);
   const chatEndRef = useRef(null);
 
@@ -115,110 +115,106 @@ export default function Dashboard({ employees }) {
 
   const total = employees.length;
 
-  // 4. SECURE, SMART, technically advanced CHATBOT LOGIC
-  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, isBotTyping]);
+  // --- 4. HIERARCHICAL KNOWLEDGE BASE ---
+  // We use categories to organize the sub-questions
+  const FAQ_CATEGORIES = [
+    {
+      id: 'attendance',
+      title: '👥 Operations & Attendance',
+      questions: [
+        { q: "How many are present today?", a: `Based on today's live logs, there are ${todayStats.present} employees present out of ${total}.`, keywords: ["present", "how many", "attendance"] },
+        { q: "Who is absent or on leave?", a: `Today, ${todayStats.leave} employees are on official leave, and ${todayStats.absent} have no work scheduled.`, keywords: ["absent", "leave", "missing"] },
+        { q: "What are the payroll cutoffs?", a: "Standard payroll cutoffs are on the 10th and 25th of every month.", keywords: ["payroll", "cutoff", "salary"] },
+        { q: "What are the overtime rules?", a: "Overtime must be pre-approved by the site supervisor before deployment ends. Unauthorized OT will not be credited.", keywords: ["overtime", "ot"] }
+      ]
+    },
+    {
+      id: 'installation',
+      title: '🔧 Installation Processes',
+      questions: [
+        { q: "What is the fiber splicing process?", a: "Fiber splicing involves stripping the outer jacket, cleaning the core with isopropyl alcohol, cleaving it perfectly flat, and fusing the ends using a fusion splicer.", keywords: ["fiber", "splicing", "splice"] },
+        { q: "How are telecom antennas mounted?", a: "Antennas are mounted on pole brackets. They must be aligned perfectly to the planned Azimuth (direction) and Mechanical Tilt (angle), then fully weatherproofed at the connectors.", keywords: ["antenna", "mount", "alignment"] },
+        { q: "What is the standard site grounding?", a: "All equipment must be tied to the Main Grounding Busbar (MGB) using heavy copper cables and compression lugs. Resistance must be less than 5 ohms to prevent lightning damage.", keywords: ["grounding", "earth", "lightning"] }
+      ]
+    },
+    {
+      id: 'hardware',
+      title: '📡 Hardware & Brands',
+      questions: [
+        { q: "What is a Rectifier System?", a: "A rectifier converts AC power from the grid into stable -48V DC power. It powers the telecom equipment and constantly charges the backup battery banks.", keywords: ["rectifier", "power"] },
+        { q: "What is the difference between BBU and RRU?", a: "The BBU (Baseband Unit) is the 'brain' that processes digital signals inside the cabinet. The RRU (Remote Radio Unit) sits on the tower to transceive RF radio waves. They connect via fiber cables.", keywords: ["bbu", "rru", "radio"] },
+        { q: "Which telecom brands do we handle?", a: "We primarily deploy and maintain equipment from major global vendors including Huawei, ZTE, Ericsson, Nokia, Emerson, and Delta.", keywords: ["brands", "vendor", "huawei", "zte", "ericsson"] }
+      ]
+    },
+    {
+      id: 'developer',
+      title: '💻 System Info',
+      questions: [
+        { q: "Who developed this system?", a: "I was proudly engineered and developed by John Patrick DC. Dela Cruz as a modern telecommunications operations platform.", keywords: ["who made you", "creator", "developer", "who programmed you"] }
+      ]
+    }
+  ];
 
-  const handleSendMessage = async (e) => {
-    e.preventDefault();
-    if (!chatInput.trim()) return;
+  // Auto-scroll chat
+  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
-    const userText = chatInput;
-    const newMsg = { id: Date.now(), text: userText, sender: 'user' };
-    setMessages(prev => [...prev, newMsg]);
+  // Handle User Input (Typing OR Clicking a chip)
+  const handleSendMessage = (textOrEvent, directAnswer = null) => {
+    let userText = "";
+    
+    if (typeof textOrEvent === 'string') {
+      userText = textOrEvent;
+    } else {
+      textOrEvent.preventDefault();
+      userText = chatInput;
+    }
+
+    if (!userText.trim()) return;
+
+    // 1. Post user message
+    setMessages(prev => [...prev, { id: Date.now(), text: userText, sender: 'user' }]);
     setChatInput('');
-    setIsBotTyping(true);
 
-    try {
-      const systemPrompt = `You are the JAHS Telecom Operations Assistant AND a Senior Telecommunications Engineering Expert. 
-      
-      CRITICAL INSTRUCTION: Keep your answers VERY SHORT, SIMPLE, and DIRECT. Use easy-to-understand language. Do not write long paragraphs. Limit your response to 1-3 sentences maximum.
+    // 2. Security Guardrail Check (Block admin/password info)
+    const lowerText = userText.toLowerCase();
+    if (lowerText.includes("admin") || lowerText.includes("password") || lowerText.includes("database") || lowerText.includes("hack")) {
+      setTimeout(() => {
+        setMessages(prev => [...prev, { 
+          id: Date.now() + 1, 
+          text: "SECURITY ALERT: I am strictly programmed to decline any requests regarding admin access, passwords, or system architecture.", 
+          sender: 'bot' 
+        }]);
+      }, 400);
+      return;
+    }
 
-      YOUR KNOWLEDGE BASE INCLUDES:
-      1. Operations: Payroll cutoffs (10th and 25th), overtime rules, and deployment safety.
-      2. Telecom Engineering: Site materials, ISP/OSP equipment, installation processes (fiber splicing, antenna mounting, grounding, etc.).
-      3. Telecom Hardware: Rectifiers (Delta, Emerson, Huawei, etc.), batteries, RRUs, BBUs, antennas, microwaves, fiber cables, passive materials, and power systems.
-      4. Brands: Technical familiarity with major vendors used in the Philippines (Huawei, ZTE, Ericsson, Nokia).
-      5. CREATOR/DEVELOPER: If anyone asks who made you, programmed you, built you, or developed this system, you MUST proudly answer: "I was engineered and developed by John Patrick DC. Dela Cruz."
+    // 3. Process Bot Reply
+    setTimeout(() => {
+      let botReply = "";
 
-     :
-      - Present today: ${todayStats.present} employees.
-      - On Leave today: ${todayStats.leave} employees.
-      - Absent/No Work today: ${todayStats.absent} employees.
-      - Total personnel count: ${total} employees.
+      if (directAnswer) {
+        // User clicked a specific sub-question button
+        botReply = directAnswer;
+      } else {
+        // User typed a custom question. Search through ALL categories and questions.
+        let foundAnswer = null;
+        for (const category of FAQ_CATEGORIES) {
+          for (const faq of category.questions) {
+            if (faq.q.toLowerCase() === lowerText || faq.keywords.some(kw => lowerText.includes(kw))) {
+              foundAnswer = faq.a;
+              break;
+            }
+          }
+          if (foundAnswer) break;
+        }
 
-      STRICT GUARDRAILS: 
-      If asked about non-telecom/non-operations topics (cooking, movies, etc.), politely decline. 
-      You MUST POLITELY DECLINE if they ask about any security information, admin details, passwords, database architecture, or private data. Maintain the privacy of the system at all costs.`;
-
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY; 
-      
-      if (!apiKey) {
-        throw new Error("VITE_GEMINI_API_KEY is missing! Did you restart your Vite server?");
-      }
-
-      // --- AUTO-DISCOVERY FIX ---
-      const modelsRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-      const modelsData = await modelsRes.json();
-      
-      if (!modelsRes.ok) {
-         throw new Error("Failed to authenticate API Key: " + (modelsData.error?.message || "Unknown error"));
-      }
-
-      const validModel = modelsData.models.find(m => 
-        m.supportedGenerationMethods.includes("generateContent") && 
-        m.name.includes("gemini")
-      );
-
-      if (!validModel) {
-        throw new Error("Google says your API key doesn't have access to any Gemini models.");
-      }
-
-      const exactModelName = validModel.name; 
-
-      // --- SEND THE MESSAGE ---
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${exactModelName}:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [
-            { role: "user", parts: [{ text: systemPrompt + "\n\nUser Question: " + userText }] }
-          ]
-        })
-      });
-
-      const data = await response.json();
-      
-      // DIAGNOSTIC CHECK
-      if (!response.ok || data.error) {
-        throw new Error(data.error?.message || `HTTP Error ${response.status}: ${response.statusText}`);
-      }
-      
-      let botReply = "I am sorry, I could not generate a response.";
-      if (data.candidates && data.candidates[0].content.parts[0].text) {
-        botReply = data.candidates[0].content.parts[0].text;
+        botReply = foundAnswer || "I'm sorry, I only have access to specific telecom and operations data. Please browse the categories below or check your spelling.";
       }
 
       setMessages(prev => [...prev, { id: Date.now() + 1, text: botReply, sender: 'bot' }]);
-
-    } catch (error) {
-      console.error("Chatbot Diagnostic Error:", error);
-      
-      let finalErrorMessage = `SYSTEM ERROR: ${error.message}`;
-
-      // Graceful Error Handling for API Limits/Quota
-      if (error.message.toLowerCase().includes("quota") || error.message.includes("429")) {
-        finalErrorMessage = "We are experiencing heavy network traffic right now! 🚦 Please wait about 60 seconds and ask me again.";
-      }
-
-      setMessages(prev => [...prev, { 
-        id: Date.now() + 1, 
-        text: finalErrorMessage, 
-        sender: 'bot' 
-      }]);
-    } finally {
-      setIsBotTyping(false);
-    }
+    }, 400); 
   };
+
 
   const greeting = currentTime.getHours() < 12 ? 'Good Morning' : currentTime.getHours() < 18 ? 'Good Afternoon' : 'Good Evening';
   const pctPresent = total > 0 ? (todayStats.present / total) * 100 : 0;
@@ -235,7 +231,7 @@ export default function Dashboard({ employees }) {
   return (
     <div className="space-y-8 animate-in fade-in duration-700 pb-10 flex flex-col min-h-full relative">
       
-      {/* --- CUSTOM CSS FOR THE WIGGLE & BOUNCE ANIMATION --- */}
+      {/* --- CUSTOM CSS FOR WIGGLE & BOUNCE --- */}
       <style>{`
         @keyframes gentle-wiggle {
           0% { transform: rotate(0deg) scale(1); }
@@ -415,6 +411,7 @@ export default function Dashboard({ employees }) {
       {/* --- MODAL --- */}
       {activeList && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200 print:bg-white print:p-0 print:block">
+          {/* Modal content omitted for brevity, remains exactly identical to previous block */}
           <div className="bg-white rounded-[2rem] w-full max-w-md shadow-2xl border border-slate-100 flex flex-col max-h-[80vh] animate-in zoom-in-95 duration-200 print:shadow-none print:border-none print:max-w-none print:h-auto print:max-h-none">
             <div className="p-6 border-b border-slate-100 flex justify-between items-center print:border-black print:pb-4">
                <div>
@@ -452,10 +449,10 @@ export default function Dashboard({ employees }) {
         </div>
       )}
 
-      {/* --- SECURE FLOATING CHATBOT WIDGET --- */}
+      {/* --- OFFLINE FLOATING CHATBOT WIDGET --- */}
       <div className="fixed bottom-6 right-6 z-50 print:hidden flex flex-col items-end">
         
-        {/* Floating "Ask Me" Bubble (Only visible when chat is closed) */}
+        {/* Floating "Ask Me" Bubble */}
         {!isChatOpen && (
           <div className="mb-3 mr-2 animate-float-bubble pointer-events-none">
             <div className="bg-[#5538ff] text-white text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-2xl rounded-br-sm shadow-xl shadow-indigo-300/50">
@@ -464,67 +461,105 @@ export default function Dashboard({ employees }) {
           </div>
         )}
 
-        {/* Chat Window */}
+        {/* Chat Window - WIDENED TO w-96 (384px) and h-[32rem] */}
         {isChatOpen && (
-          <div className="w-80 h-96 bg-white border border-slate-200 rounded-3xl shadow-2xl mb-4 flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 duration-300 relative z-10">
-            <div className="bg-[#5538ff] p-4 flex justify-between items-center text-white">
+          <div className="w-96 h-[32rem] bg-white border border-slate-200 rounded-3xl shadow-2xl mb-4 flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 duration-300 relative z-10">
+            
+            {/* Chat Header */}
+            <div className="bg-[#5538ff] p-4 flex justify-between items-center text-white shrink-0">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-white p-1.5 flex items-center justify-center overflow-hidden border-2 border-white relative">
                   <img src="/jahsbots-removebg-preview.png" alt="Bot Icon" className="w-full h-full object-cover z-10 relative" onError={(e) => { e.target.onerror = null; e.target.style.display = 'none'; }} />
                 </div>
                 <div>
                   <h4 className="text-sm font-black tracking-tight leading-none">JAHS Assistant</h4>
-                  <p className="text-[9px] text-indigo-200 uppercase tracking-widest mt-0.5">Protected AI</p>
+                  <p className="text-[9px] text-indigo-200 uppercase tracking-widest mt-0.5">Knowledge Base</p>
                 </div>
               </div>
               <button onClick={() => setIsChatOpen(false)} className="text-indigo-200 hover:text-white transition-colors"><X size={20}/></button>
             </div>
 
+            {/* Chat Messages Area */}
             <div className="flex-1 p-4 overflow-y-auto flex flex-col gap-4 bg-slate-50 relative z-0">
               {messages.map(msg => (
                 <div key={msg.id} className={`flex gap-2 relative z-0 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  {/* Avatar next to bot messages */}
                   {msg.sender === 'bot' && (
                     <div className="w-8 h-8 rounded-full bg-white flex-shrink-0 flex items-center justify-center overflow-hidden border border-slate-200 relative mt-1 p-1">
                        <img src="/jahsbots-removebg-preview.png" alt="Bot Avatar" className="w-full h-full object-contain z-10 relative" onError={(e) => { e.target.onerror = null; e.target.style.display = 'none'; }} />
                     </div>
                   )}
-                  <div className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm whitespace-pre-wrap ${msg.sender === 'user' ? 'bg-[#5538ff] text-white rounded-br-none shadow-md' : 'bg-white text-slate-800 border border-slate-200 rounded-bl-none shadow-sm'}`}>
+                  <div className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm whitespace-pre-wrap ${msg.sender === 'user' ? 'bg-[#5538ff] text-white rounded-br-none shadow-md' : 'bg-white text-slate-800 border border-slate-200 rounded-bl-none shadow-sm'}`}>
                     {msg.text}
                   </div>
                 </div>
               ))}
-              {isBotTyping && (
-                <div className="flex justify-start gap-2 relative z-0">
-                  <div className="w-8 h-8 rounded-full bg-white flex-shrink-0 flex items-center justify-center overflow-hidden border border-slate-200 p-1 relative mt-1">
-                     <img src="/jahsbots-removebg-preview.png" alt="Bot Typing" className="w-full h-full object-contain z-10 relative" onError={(e) => { e.target.onerror = null; e.target.style.display = 'none'; }} />
-                  </div>
-                  <div className="bg-white border border-slate-200 rounded-2xl rounded-bl-none px-4 py-3 flex gap-1 shadow-sm h-8 items-center">
-                    <span className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-bounce"></span>
-                    <span className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></span>
-                    <span className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></span>
-                  </div>
-                </div>
-              )}
               <div ref={chatEndRef} />
             </div>
 
-            <form onSubmit={handleSendMessage} className="p-3 bg-white border-t border-slate-100 flex gap-2 relative z-10">
+            {/* HIERARCHICAL MENU SYSTEM */}
+            <div className="bg-white border-t border-slate-100 flex flex-col shrink-0 max-h-48">
+              
+              {/* Back Button (Only shows if inside a category) */}
+              {currentCategory && (
+                <div className="px-3 py-2 border-b border-slate-50 flex items-center">
+                   <button 
+                     onClick={() => setCurrentCategory(null)}
+                     className="flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-indigo-500 hover:text-indigo-700 transition-colors"
+                   >
+                     <ArrowLeft size={12} /> Back to Menus
+                   </button>
+                </div>
+              )}
+
+              {/* Menu List */}
+              <div className="p-3 overflow-y-auto flex flex-col gap-2">
+                {!currentCategory ? (
+                  // MAIN MENU: Show Categories
+                  <>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 pl-1 mb-1">Topics</p>
+                    {FAQ_CATEGORIES.map((category) => (
+                      <button 
+                        key={category.id}
+                        onClick={() => setCurrentCategory(category.id)}
+                        className="text-left bg-slate-50 hover:bg-indigo-50 border border-slate-100 hover:border-indigo-100 text-slate-700 hover:text-indigo-700 text-xs font-bold px-4 py-2.5 rounded-xl transition-all flex justify-between items-center group"
+                      >
+                        <span>{category.title}</span>
+                        <ChevronRight size={16} className="text-slate-300 group-hover:text-indigo-500 transition-colors" />
+                      </button>
+                    ))}
+                  </>
+                ) : (
+                  // SUB MENU: Show Questions inside selected Category
+                  FAQ_CATEGORIES.find(c => c.id === currentCategory)?.questions.map((faq, index) => (
+                    <button 
+                      key={index}
+                      onClick={() => handleSendMessage(faq.q, faq.a)}
+                      className="text-left bg-indigo-50/50 hover:bg-indigo-100 border border-indigo-100 text-indigo-700 text-[11px] px-3 py-2 rounded-xl transition-colors"
+                    >
+                      {faq.q}
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Input Form */}
+            <form onSubmit={handleSendMessage} className="p-3 bg-white border-t border-slate-100 flex gap-2 shrink-0 relative z-10">
               <input 
                 type="text" 
                 value={chatInput} 
                 onChange={(e) => setChatInput(e.target.value)}
-                placeholder="Ask about operations..." 
+                placeholder="Or type your question here..." 
                 className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none focus:border-indigo-500 transition-colors"
               />
-              <button type="submit" disabled={!chatInput.trim() || isBotTyping} className="bg-[#5538ff] text-white p-2 rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors">
+              <button type="submit" disabled={!chatInput.trim()} className="bg-[#5538ff] text-white p-2 rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors flex-shrink-0">
                 <Send size={18} />
               </button>
             </form>
           </div>
         )}
 
-        {/* --- MAIN WIGGLING BOT BUTTON (Image is transparent) --- */}
+        {/* --- MAIN WIGGLING BOT BUTTON --- */}
         <button 
           onClick={() => setIsChatOpen(!isChatOpen)}
           className={`transition-all duration-300 flex items-center justify-center relative hover:scale-110 active:scale-95 z-0 
