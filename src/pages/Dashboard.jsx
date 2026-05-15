@@ -223,10 +223,34 @@ export default function Dashboard({ employees }) {
   const stop1 = pctPresent;
   const stop2 = pctPresent + pctLeave;
 
+  // Determine what day today is (0 = Sunday, 1 = Monday ... 5 = Friday, 6 = Saturday)
+  const currentDayNum = currentTime.getDay(); 
+
+  // Mock historical data so the graph looks realistic for your OJT presentation
+  const mockHistorical = { 1: 95, 2: 88, 3: 92, 4: 90, 5: 85, 6: 75 };
+
+  // Dynamically build the chart based on today's actual day
   const weeklyData = [
-    { day: 'Mon', percent: 95 }, { day: 'Tue', percent: 88 }, { day: 'Wed', percent: pctPresent > 0 ? Math.round(pctPresent) : 0 },
-    { day: 'Thu', percent: 0 }, { day: 'Fri', percent: 0 }, { day: 'Sat', percent: 0 },
-  ];
+    { day: 'Mon', id: 1 },
+    { day: 'Tue', id: 2 },
+    { day: 'Wed', id: 3 },
+    { day: 'Thu', id: 4 },
+    { day: 'Fri', id: 5 },
+    { day: 'Sat', id: 6 },
+  ].map(item => {
+    let percent = 0;
+    if (item.id < currentDayNum) {
+      // If it is a PAST day, show historical data
+      percent = mockHistorical[item.id];
+    } else if (item.id === currentDayNum) {
+      // If it is TODAY, show the live calculated data
+      percent = pctPresent > 0 ? Math.round(pctPresent) : 0;
+    } else {
+      // If it is a FUTURE day, leave it empty (0)
+      percent = 0;
+    }
+    return { day: item.day, percent };
+  });
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700 pb-10 flex flex-col min-h-full relative">
