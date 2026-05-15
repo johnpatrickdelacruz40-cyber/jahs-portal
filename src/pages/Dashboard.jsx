@@ -29,7 +29,7 @@ export default function Dashboard({ employees }) {
   const [selectedDestination, setSelectedDestination] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
 
-  // --- SECURE CHATBOT STATE ---
+  // --- SECURE DYNAMIC CHATBOT STATE ---
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatInput, setChatInput] = useState('');
   const [isBotTyping, setIsBotTyping] = useState(false);
@@ -115,7 +115,7 @@ export default function Dashboard({ employees }) {
 
   const total = employees.length;
 
-  // 4. SMART AUTO-DISCOVERY CHATBOT LOGIC
+  // 4. SECURE, SMART, technically advanced CHATBOT LOGIC
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, isBotTyping]);
 
   const handleSendMessage = async (e) => {
@@ -129,23 +129,26 @@ export default function Dashboard({ employees }) {
     setIsBotTyping(true);
 
     try {
-      const systemPrompt = `You are the JAHS Telecom Operations Assistant. You are professional, brief, and helpful. 
-      You only answer questions about:
-      - Payroll cutoffs (10th and 25th)
-      - Overtime rules
-      - Telecom in the Philippines
-      - Employees here and attendance
-      - Weeks and deployment safety. 
+      const systemPrompt = `You are the JAHS Telecom Operations Assistant AND a Senior Telecommunications Engineering Expert. 
       
-      Strictest GUARDRAILS: 
-      If asked about anything else, politely decline. 
-      You MUST POLITELY DECLINE if they ask about any security information, admin details, passwords, database architecture, or private data. Maintain the privacy of the system at all costs.
+      CRITICAL INSTRUCTION: Keep your answers VERY SHORT, SIMPLE, and DIRECT. Use easy-to-understand language. Do not write long paragraphs. Limit your response to 1-3 sentences maximum.
+
+      YOUR KNOWLEDGE BASE INCLUDES:
+      1. Operations: Payroll cutoffs (10th and 25th), overtime rules, and deployment safety.
+      2. Telecom Engineering: Site materials, ISP/OSP equipment, installation processes (fiber splicing, antenna mounting, grounding, etc.).
+      3. Telecom Hardware: Rectifiers (Delta, Emerson, Huawei, etc.), batteries, RRUs, BBUs, antennas, microwaves, fiber cables, passive materials, and power systems.
+      4. Brands: Technical familiarity with major vendors used in the Philippines (Huawei, ZTE, Ericsson, Nokia).
+      5. CREATOR/DEVELOPER: If anyone asks who made you, programmed you, built you, or developed this system, you MUST proudly answer: "I was engineered and developed by John Patrick DC. Dela Cruz."
 
      :
       - Present today: ${todayStats.present} employees.
       - On Leave today: ${todayStats.leave} employees.
       - Absent/No Work today: ${todayStats.absent} employees.
-      - Total personnel count: ${total} employees.`;
+      - Total personnel count: ${total} employees.
+
+      STRICT GUARDRAILS: 
+      If asked about non-telecom/non-operations topics (cooking, movies, etc.), politely decline. 
+      You MUST POLITELY DECLINE if they ask about any security information, admin details, passwords, database architecture, or private data. Maintain the privacy of the system at all costs.`;
 
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY; 
       
@@ -153,7 +156,7 @@ export default function Dashboard({ employees }) {
         throw new Error("VITE_GEMINI_API_KEY is missing! Did you restart your Vite server?");
       }
 
-      // --- THE AUTO-DISCOVERY FIX (Finds the exact model Google allows you to use) ---
+      // --- AUTO-DISCOVERY FIX ---
       const modelsRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
       const modelsData = await modelsRes.json();
       
@@ -172,7 +175,7 @@ export default function Dashboard({ employees }) {
 
       const exactModelName = validModel.name; 
 
-      // --- SEND THE MESSAGE USING THE DISCOVERED MODEL ---
+      // --- SEND THE MESSAGE ---
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${exactModelName}:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -185,8 +188,9 @@ export default function Dashboard({ employees }) {
 
       const data = await response.json();
       
+      // DIAGNOSTIC CHECK
       if (!response.ok || data.error) {
-        throw new Error(data.error?.message || `HTTP Error ${response.status}`);
+        throw new Error(data.error?.message || `HTTP Error ${response.status}: ${response.statusText}`);
       }
       
       let botReply = "I am sorry, I could not generate a response.";
@@ -198,9 +202,17 @@ export default function Dashboard({ employees }) {
 
     } catch (error) {
       console.error("Chatbot Diagnostic Error:", error);
+      
+      let finalErrorMessage = `SYSTEM ERROR: ${error.message}`;
+
+      // Graceful Error Handling for API Limits/Quota
+      if (error.message.toLowerCase().includes("quota") || error.message.includes("429")) {
+        finalErrorMessage = "We are experiencing heavy network traffic right now! 🚦 Please wait about 60 seconds and ask me again.";
+      }
+
       setMessages(prev => [...prev, { 
         id: Date.now() + 1, 
-        text: `SYSTEM ERROR: ${error.message}`, 
+        text: finalErrorMessage, 
         sender: 'bot' 
       }]);
     } finally {
@@ -223,6 +235,28 @@ export default function Dashboard({ employees }) {
   return (
     <div className="space-y-8 animate-in fade-in duration-700 pb-10 flex flex-col min-h-full relative">
       
+      {/* --- CUSTOM CSS FOR THE WIGGLE & BOUNCE ANIMATION --- */}
+      <style>{`
+        @keyframes gentle-wiggle {
+          0% { transform: rotate(0deg) scale(1); }
+          15% { transform: rotate(-8deg) scale(1.05); }
+          30% { transform: rotate(8deg) scale(1.05); }
+          45% { transform: rotate(-8deg) scale(1.05); }
+          60% { transform: rotate(0deg) scale(1); }
+          100% { transform: rotate(0deg) scale(1); }
+        }
+        .animate-bot-wiggle {
+          animation: gentle-wiggle 3s infinite;
+        }
+        @keyframes float-bubble {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-5px); }
+        }
+        .animate-float-bubble {
+          animation: float-bubble 2s ease-in-out infinite;
+        }
+      `}</style>
+
       <div className={activeList ? "print:hidden" : ""}>
         
         {/* --- HEADER --- */}
@@ -420,12 +454,23 @@ export default function Dashboard({ employees }) {
 
       {/* --- SECURE FLOATING CHATBOT WIDGET --- */}
       <div className="fixed bottom-6 right-6 z-50 print:hidden flex flex-col items-end">
+        
+        {/* Floating "Ask Me" Bubble (Only visible when chat is closed) */}
+        {!isChatOpen && (
+          <div className="mb-3 mr-2 animate-float-bubble pointer-events-none">
+            <div className="bg-[#5538ff] text-white text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-2xl rounded-br-sm shadow-xl shadow-indigo-300/50">
+              Ask Me!
+            </div>
+          </div>
+        )}
+
+        {/* Chat Window */}
         {isChatOpen && (
-          <div className="w-80 h-96 bg-white border border-slate-200 rounded-3xl shadow-2xl mb-4 flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 duration-300">
+          <div className="w-80 h-96 bg-white border border-slate-200 rounded-3xl shadow-2xl mb-4 flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 duration-300 relative z-10">
             <div className="bg-[#5538ff] p-4 flex justify-between items-center text-white">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-white p-1.5 flex items-center justify-center overflow-hidden border border-indigo-200 relative">
-                  <img src="/jahsbots-removebg-preview.png" alt="Bot Icon" className="h-6" />
+                <div className="w-10 h-10 rounded-full bg-white p-1.5 flex items-center justify-center overflow-hidden border-2 border-white relative">
+                  <img src="/jahsbots-removebg-preview.png" alt="Bot Icon" className="w-full h-full object-cover z-10 relative" onError={(e) => { e.target.onerror = null; e.target.style.display = 'none'; }} />
                 </div>
                 <div>
                   <h4 className="text-sm font-black tracking-tight leading-none">JAHS Assistant</h4>
@@ -435,12 +480,13 @@ export default function Dashboard({ employees }) {
               <button onClick={() => setIsChatOpen(false)} className="text-indigo-200 hover:text-white transition-colors"><X size={20}/></button>
             </div>
 
-            <div className="flex-1 p-4 overflow-y-auto flex flex-col gap-4 bg-slate-50">
+            <div className="flex-1 p-4 overflow-y-auto flex flex-col gap-4 bg-slate-50 relative z-0">
               {messages.map(msg => (
-                <div key={msg.id} className={`flex gap-2 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div key={msg.id} className={`flex gap-2 relative z-0 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  {/* Avatar next to bot messages */}
                   {msg.sender === 'bot' && (
-                    <div className="bg-white border border-slate-200 rounded-full h-8 w-8 flex items-center justify-center flex-shrink-0 relative overflow-hidden mt-1 p-1">
-                       <img src="/jahsbots-removebg-preview.png" alt="Bot Avatar" className="h-6" />
+                    <div className="w-8 h-8 rounded-full bg-white flex-shrink-0 flex items-center justify-center overflow-hidden border border-slate-200 relative mt-1 p-1">
+                       <img src="/jahsbots-removebg-preview.png" alt="Bot Avatar" className="w-full h-full object-contain z-10 relative" onError={(e) => { e.target.onerror = null; e.target.style.display = 'none'; }} />
                     </div>
                   )}
                   <div className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm whitespace-pre-wrap ${msg.sender === 'user' ? 'bg-[#5538ff] text-white rounded-br-none shadow-md' : 'bg-white text-slate-800 border border-slate-200 rounded-bl-none shadow-sm'}`}>
@@ -449,9 +495,9 @@ export default function Dashboard({ employees }) {
                 </div>
               ))}
               {isBotTyping && (
-                <div className="flex justify-start gap-2">
-                  <div className="bg-white border border-slate-200 rounded-full h-8 w-8 flex items-center justify-center flex-shrink-0 relative overflow-hidden p-1 mt-1">
-                     <img src="/jahsbots-removebg-preview.png" alt="Bot Typing" className="h-6" />
+                <div className="flex justify-start gap-2 relative z-0">
+                  <div className="w-8 h-8 rounded-full bg-white flex-shrink-0 flex items-center justify-center overflow-hidden border border-slate-200 p-1 relative mt-1">
+                     <img src="/jahsbots-removebg-preview.png" alt="Bot Typing" className="w-full h-full object-contain z-10 relative" onError={(e) => { e.target.onerror = null; e.target.style.display = 'none'; }} />
                   </div>
                   <div className="bg-white border border-slate-200 rounded-2xl rounded-bl-none px-4 py-3 flex gap-1 shadow-sm h-8 items-center">
                     <span className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-bounce"></span>
@@ -463,7 +509,7 @@ export default function Dashboard({ employees }) {
               <div ref={chatEndRef} />
             </div>
 
-            <form onSubmit={handleSendMessage} className="p-3 bg-white border-t border-slate-100 flex gap-2">
+            <form onSubmit={handleSendMessage} className="p-3 bg-white border-t border-slate-100 flex gap-2 relative z-10">
               <input 
                 type="text" 
                 value={chatInput} 
@@ -478,11 +524,22 @@ export default function Dashboard({ employees }) {
           </div>
         )}
 
+        {/* --- MAIN WIGGLING BOT BUTTON (Image is transparent) --- */}
         <button 
           onClick={() => setIsChatOpen(!isChatOpen)}
-          className={`p-4 rounded-full shadow-2xl transition-all duration-300 hover:scale-110 active:scale-95 flex items-center justify-center ${isChatOpen ? 'bg-rose-500 text-white shadow-rose-300/50' : 'bg-[#5538ff] text-white shadow-indigo-400/50'}`}
+          className={`transition-all duration-300 flex items-center justify-center relative hover:scale-110 active:scale-95 z-0 
+            ${isChatOpen ? 'h-16 w-16 bg-rose-500 text-white rounded-full shadow-2xl shadow-rose-300/50' : 'h-24 w-24 animate-bot-wiggle drop-shadow-2xl'}`}
         >
-          {isChatOpen ? <X size={28} /> : <MessageSquare size={28} />}
+          {isChatOpen ? (
+            <X size={32} />
+          ) : (
+            <img 
+              src="/jahsbots-removebg-preview.png" 
+              alt="Bot Button" 
+              className="w-full h-full object-contain filter drop-shadow-lg" 
+              onError={(e) => { e.target.onerror = null; e.target.style.display = 'none'; }} 
+            />
+          )}
         </button>
       </div>
 
