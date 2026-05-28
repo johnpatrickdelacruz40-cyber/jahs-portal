@@ -15,7 +15,6 @@ export default function Employees({ employees, refreshData, logHistory }) {
   const [selectedDocs, setSelectedDocs] = useState({});
   const [existingDocs, setExistingDocs] = useState({});
   
-  // JAHS ID added back here too
   const DOCUMENT_TYPES = [
     { key: 'jahs_id_url', label: 'JAHS ID' },
     { key: 'govt_id_url', label: 'GOVT ID' },
@@ -40,7 +39,7 @@ export default function Employees({ employees, refreshData, logHistory }) {
       setFormData({ idNo: emp.idNo || '', name: emp.name, photo: emp.photo }); 
       setEditingId(emp.id); 
       setExistingDocs({
-        jahs_id_url: emp.jahs_id_url, // Added to existing docs check
+        jahs_id_url: emp.jahs_id_url,
         govt_id_url: emp.govt_id_url, wah_url: emp.wah_url, 
         so2_url: emp.so2_url, ncii_url: emp.ncii_url, 
         nbi_url: emp.nbi_url, signature_url: emp.signature_url
@@ -73,12 +72,19 @@ export default function Employees({ employees, refreshData, logHistory }) {
     if (isSubmitting) return; 
     setIsSubmitting(true);
 
-    // --- PROCESS ALL PENDING DOCUMENT UPLOADS FIRST ---
-    let uploadedUrls = {};
+    // --- PROCESS DOCUMENT UPLOADS AND DELETIONS ---
+    let documentUpdates = {};
+    
     for (const doc of DOCUMENT_TYPES) {
       if (selectedDocs[doc.key]) {
+        // 1. If a NEW file is selected, upload it and get the URL
         const url = await uploadDocument(selectedDocs[doc.key], formData.name, doc.label);
-        if (url) uploadedUrls[doc.key] = url;
+        documentUpdates[doc.key] = url;
+      } else if (!existingDocs[doc.key]) {
+        // 2. If no new file is selected AND there is no existing file, explicitly nullify it.
+        // This is the trick! If you clicked the "X", it removes it from existingDocs,
+        // so this triggers and wipes the database column, making it instantly disappear in profiles!
+        documentUpdates[doc.key] = null;
       }
     }
 
@@ -86,7 +92,7 @@ export default function Employees({ employees, refreshData, logHistory }) {
       idNo: formData.idNo,
       name: formData.name,
       photo: formData.photo,
-      ...uploadedUrls 
+      ...documentUpdates 
     };
 
     try {
@@ -101,7 +107,7 @@ export default function Employees({ employees, refreshData, logHistory }) {
       }
 
       setIsModalOpen(false); 
-      await refreshData();
+      await refreshData(); // This instantly pulls the new data for the Personnel Hub
     } catch (error) {
       alert("Database Error: " + error.message);
     } finally {
@@ -117,6 +123,19 @@ export default function Employees({ employees, refreshData, logHistory }) {
         refreshData();
       }
     }
+  };
+
+  // --- NEW LOGIC: HANDLE REMOVING A DOCUMENT BEFORE SAVING ---
+  const handleRemoveDocument = (docKey) => {
+    // Remove from newly selected files
+    const newSelected = { ...selectedDocs };
+    delete newSelected[docKey];
+    setSelectedDocs(newSelected);
+    
+    // Remove from existing database records 
+    const newExisting = { ...existingDocs };
+    delete newExisting[docKey];
+    setExistingDocs(newExisting);
   };
 
   return (
@@ -206,24 +225,44 @@ export default function Employees({ employees, refreshData, logHistory }) {
                     {DOCUMENT_TYPES.map((doc) => {
                       const hasNew = !!selectedDocs[doc.key];
                       const hasExisting = !!existingDocs[doc.key];
+                      const hasDoc = hasNew || hasExisting;
                       
                       return (
-                        <div key={doc.key} className="relative">
-                          <input 
-                            type="file" 
-                            accept="image/*,.pdf"
-                            onChange={(e) => setSelectedDocs({...selectedDocs, [doc.key]: e.target.files[0]})}
-                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed z-10"
-                            disabled={isSubmitting || !formData.name}
-                            title={`Upload ${doc.label}`}
-                          />
+                        <div key={doc.key} className="relative group">
+                          
+                          {/* File Input (Only active if no document exists) */}
+                          {!hasDoc && (
+                            <input 
+                              type="file" 
+                              accept="image/*,.pdf"
+                              onChange={(e) => setSelectedDocs({...selectedDocs, [doc.key]: e.target.files[0]})}
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed z-10"
+                              disabled={isSubmitting || !formData.name}
+                              title={`Upload ${doc.label}`}
+                            />
+                          )}
+
                           <div className={`flex flex-col items-center justify-center p-3 rounded-2xl border-2 transition-all 
-                            ${hasNew ? 'border-emerald-400 bg-emerald-50 text-emerald-600' : (hasExisting ? 'border-indigo-400 bg-indigo-50 text-indigo-600' : 'border-dashed border-slate-200 bg-slate-50 text-slate-400 group-hover:border-indigo-300')}`}>
+                            ${hasNew ? 'border-emerald-400 bg-emerald-50 text-emerald-600' : (hasExisting ? 'border-indigo-400 bg-indigo-50 text-indigo-600' : 'border-dashed border-slate-200 bg-slate-50 text-slate-400 hover:border-indigo-300')}`}>
                             <span className="font-black text-[10px] tracking-widest uppercase leading-none">{doc.label}</span>
                             <span className="text-[8px] mt-1.5 truncate w-full text-center font-bold">
                               {hasNew ? 'Selected' : (hasExisting ? 'Saved ✅' : 'Upload')}
                             </span>
                           </div>
+
+                          {/* --- NEW: REMOVE (X) BUTTON --- */}
+                          {hasDoc && (
+                            <button
+                              type="button"
+                              disabled={isSubmitting}
+                              onClick={() => handleRemoveDocument(doc.key)}
+                              className="absolute -top-2 -right-2 w-6 h-6 bg-rose-500 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-rose-600 hover:scale-110 active:scale-95 transition-all z-20 disabled:opacity-50"
+                              title={`Remove ${doc.label}`}
+                            >
+                              <X size={12} strokeWidth={4} />
+                            </button>
+                          )}
+                          
                         </div>
                       );
                     })}
