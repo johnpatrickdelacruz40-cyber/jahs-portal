@@ -16,9 +16,12 @@ export default function EmployeeProfiles({ employees }) {
   const [dtrDetails, setDtrDetails] = useState({}); 
   const [expandedId, setExpandedId] = useState(null);
 
-  // --- NEW: DOCUMENT VIEWER STATE & CONFIG ---
+  // --- DOCUMENT VIEWER STATE & CONFIG ---
   const [viewingDoc, setViewingDoc] = useState(null);
+  
+  // JAHS ID added back to the top of the list!
   const DOCUMENT_TYPES = [
+    { key: 'jahs_id_url', label: 'JAHS ID' },
     { key: 'govt_id_url', label: 'GOVT ID' },
     { key: 'wah_url', label: 'WAH' },
     { key: 'so2_url', label: 'SO2' },
@@ -108,7 +111,7 @@ export default function EmployeeProfiles({ employees }) {
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">{emp.idNo}</p>
                          </div>
                          
-                         {/* --- NEW: DOCUMENT BUTTONS --- */}
+                         {/* --- DOCUMENT BUTTONS --- */}
                          <div className="flex flex-wrap items-center gap-2 md:ml-4" onClick={(e) => e.stopPropagation()}>
                             {DOCUMENT_TYPES.map((doc) => {
                               const fileUrl = emp[doc.key];
@@ -311,7 +314,7 @@ export default function EmployeeProfiles({ employees }) {
         })}
       </div>
 
-      {/* --- NEW: DOCUMENT VIEWER POPUP MODAL --- */}
+      {/* --- DOCUMENT VIEWER POPUP MODAL --- */}
       {viewingDoc && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="bg-white rounded-3xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95">

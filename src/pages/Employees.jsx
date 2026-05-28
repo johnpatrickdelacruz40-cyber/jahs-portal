@@ -11,10 +11,13 @@ export default function Employees({ employees, refreshData, logHistory }) {
   
   const [formData, setFormData] = useState({ idNo: '', name: '', photo: null });
 
-  // --- NEW: DOCUMENT UPLOAD STATE ---
+  // --- DOCUMENT UPLOAD STATE ---
   const [selectedDocs, setSelectedDocs] = useState({});
   const [existingDocs, setExistingDocs] = useState({});
+  
+  // JAHS ID added back here too
   const DOCUMENT_TYPES = [
+    { key: 'jahs_id_url', label: 'JAHS ID' },
     { key: 'govt_id_url', label: 'GOVT ID' },
     { key: 'wah_url', label: 'WAH' },
     { key: 'so2_url', label: 'SO2' },
@@ -37,6 +40,7 @@ export default function Employees({ employees, refreshData, logHistory }) {
       setFormData({ idNo: emp.idNo || '', name: emp.name, photo: emp.photo }); 
       setEditingId(emp.id); 
       setExistingDocs({
+        jahs_id_url: emp.jahs_id_url, // Added to existing docs check
         govt_id_url: emp.govt_id_url, wah_url: emp.wah_url, 
         so2_url: emp.so2_url, ncii_url: emp.ncii_url, 
         nbi_url: emp.nbi_url, signature_url: emp.signature_url
@@ -46,11 +50,11 @@ export default function Employees({ employees, refreshData, logHistory }) {
       setEditingId(null); 
       setExistingDocs({});
     }
-    setSelectedDocs({}); // Reset new file selections
+    setSelectedDocs({}); 
     setIsModalOpen(true);
   };
 
-  // --- NEW: HELPER TO UPLOAD FILES TO SUPABASE ---
+  // --- HELPER TO UPLOAD FILES TO SUPABASE ---
   const uploadDocument = async (file, employeeName, docType) => {
     if (!file) return null;
     const cleanName = employeeName.replace(/[^a-zA-Z0-9]/g, '_');
@@ -69,7 +73,7 @@ export default function Employees({ employees, refreshData, logHistory }) {
     if (isSubmitting) return; 
     setIsSubmitting(true);
 
-    // --- NEW: PROCESS ALL PENDING DOCUMENT UPLOADS FIRST ---
+    // --- PROCESS ALL PENDING DOCUMENT UPLOADS FIRST ---
     let uploadedUrls = {};
     for (const doc of DOCUMENT_TYPES) {
       if (selectedDocs[doc.key]) {
@@ -82,7 +86,7 @@ export default function Employees({ employees, refreshData, logHistory }) {
       idNo: formData.idNo,
       name: formData.name,
       photo: formData.photo,
-      ...uploadedUrls // Inject the new URLs into the database save
+      ...uploadedUrls 
     };
 
     try {
@@ -195,7 +199,7 @@ export default function Employees({ employees, refreshData, logHistory }) {
                   </div>
                 </div>
 
-                {/* --- NEW: DOCUMENT UPLOAD GRID --- */}
+                {/* --- DOCUMENT UPLOAD GRID --- */}
                 <div className="space-y-3 pt-4 border-t border-slate-100">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Upload Documents (PDF / Image)</label>
                   <div className="grid grid-cols-3 gap-3">
