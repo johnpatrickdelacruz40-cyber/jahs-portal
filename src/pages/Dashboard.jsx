@@ -352,11 +352,24 @@ export default function Dashboard({ employees }) {
             <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-8 flex-1 flex flex-col relative z-20">
               
               <div className="flex justify-between items-start mb-6">
-                <div>
-                  <h3 className="text-lg font-black tracking-tight text-slate-900 uppercase flex items-center gap-2"><Navigation size={18} className="text-indigo-500" /> Deployment Router</h3>
-                  <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest flex items-center gap-1">From <MapPin size={10}/> Bulakan HQ</p>
-                </div>
-              </div>
+  <div>
+    <h3 className="text-lg font-black tracking-tight text-slate-900 uppercase flex items-center gap-2">
+      <Navigation size={18} className="text-indigo-500" /> Deployment Router
+    </h3>
+    <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest flex items-center gap-1">From <MapPin size={10}/> Bulakan HQ</p>
+  </div>
+  
+  {/* --- NEW GEOLOCATOR BUTTON --- */}
+  <a 
+    href="https://jahs-geolocator.vercel.app/" 
+    target="_blank" 
+    rel="noopener noreferrer"
+    className="p-2.5 bg-indigo-50 text-indigo-600 rounded-2xl hover:bg-indigo-100 transition-all hover:scale-105 active:scale-95 border border-indigo-100"
+    title="Open Geolocator"
+  >
+    <MapPin size={20} />
+  </a>
+</div>
 
               {/* Destination Search Bar */}
               <div className="relative mb-6">
