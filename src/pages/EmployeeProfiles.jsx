@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { Search, ChevronLeft, ChevronRight, User, ChevronDown, ChevronUp, Printer, FileText } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, User, ChevronDown, ChevronUp, Printer, FileText, X, ExternalLink } from 'lucide-react';
 
 const getDBDateStr = (dateObj) => {
   const year = dateObj.getFullYear();
@@ -10,12 +10,22 @@ const getDBDateStr = (dateObj) => {
 };
 
 export default function EmployeeProfiles({ employees }) {
-  // ... [Keep existing state variables] ...
   const [searchTerm, setSearchTerm] = useState('');
   const [viewDate, setViewDate] = useState(new Date());
   const [attendanceLogs, setAttendanceLogs] = useState({});
   const [dtrDetails, setDtrDetails] = useState({}); 
   const [expandedId, setExpandedId] = useState(null);
+
+  // --- NEW: DOCUMENT VIEWER STATE & CONFIG ---
+  const [viewingDoc, setViewingDoc] = useState(null);
+  const DOCUMENT_TYPES = [
+    { key: 'govt_id_url', label: 'GOVT ID' },
+    { key: 'wah_url', label: 'WAH' },
+    { key: 'so2_url', label: 'SO2' },
+    { key: 'ncii_url', label: 'NCII' },
+    { key: 'nbi_url', label: 'NBI' },
+    { key: 'signature_url', label: 'SIGN' }
+  ];
 
   const handlePrevCutoff = () => { const d = new Date(viewDate); d.setDate(d.getDate() - 15); setViewDate(d); };
   const handleNextCutoff = () => { const d = new Date(viewDate); d.setDate(d.getDate() + 15); setViewDate(d); };
@@ -27,16 +37,14 @@ export default function EmployeeProfiles({ employees }) {
     return { label: `${new Date(year, month - 1, 1).toLocaleString('default', { month: 'long' })} 26th - ${baseDate.toLocaleString('default', { month: 'long' })} 10th`, start: new Date(year, month - 1, 26), end: new Date(year, month, 10) };
   };
 
-  // --- SUNDAY FIX APPLIED HERE ---
   const currentCutoff = getCutoffRange(viewDate);
   const cutoffDays = [];
   let d = new Date(currentCutoff.start);
   while (d <= currentCutoff.end) { 
-    cutoffDays.push(new Date(d)); // This now includes Sundays perfectly!
+    cutoffDays.push(new Date(d));
     d.setDate(d.getDate() + 1); 
   }
 
-  // ... [Keep the exact rest of your EmployeeProfiles.jsx code below this line] ...
   const fetchLogs = async () => {
     const { data } = await supabase.from('attendance_logs').select('*');
     const mappedStatus = {};
@@ -58,7 +66,7 @@ export default function EmployeeProfiles({ employees }) {
   useEffect(() => { fetchLogs(); }, [viewDate]);
 
   return (
-    <div className="h-full">
+    <div className="h-full relative">
       <div className="space-y-8 animate-in fade-in duration-700 print:hidden">
          <div className="flex flex-col md:flex-row justify-between items-end gap-6">
            <div className="space-y-2">
@@ -91,16 +99,39 @@ export default function EmployeeProfiles({ employees }) {
                 <div key={emp.id} className={`bg-white border border-slate-200 rounded-[2.5rem] shadow-sm overflow-hidden transition-all duration-300 ${isExpanded ? 'ring-4 ring-indigo-500/10' : 'hover:shadow-md'}`}>
                    
                    <div onClick={() => setExpandedId(isExpanded ? null : emp.id)} className="p-8 flex items-center justify-between cursor-pointer hover:bg-slate-50/50 transition-colors">
-                      <div className="flex items-center gap-6">
-                         <div className="w-20 h-20 rounded-[1.5rem] border-4 border-slate-50 shadow-sm overflow-hidden bg-white p-1">
+                      <div className="flex flex-col md:flex-row md:items-center gap-6">
+                         <div className="w-20 h-20 rounded-[1.5rem] border-4 border-slate-50 shadow-sm overflow-hidden bg-white p-1 shrink-0">
                             {emp.photo ? <img src={emp.photo} className="w-full h-full object-cover rounded-xl" /> : <User className="text-slate-200 m-auto h-full" size={32} />}
                          </div>
                          <div>
                             <h4 className="text-2xl font-black text-slate-900 leading-tight tracking-tight">{emp.name}</h4>
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">{emp.idNo}</p>
                          </div>
+                         
+                         {/* --- NEW: DOCUMENT BUTTONS --- */}
+                         <div className="flex flex-wrap items-center gap-2 md:ml-4" onClick={(e) => e.stopPropagation()}>
+                            {DOCUMENT_TYPES.map((doc) => {
+                              const fileUrl = emp[doc.key];
+                              const hasDoc = !!fileUrl;
+                              return (
+                                <button
+                                  key={doc.key}
+                                  disabled={!hasDoc}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (hasDoc) setViewingDoc({ url: fileUrl, title: `${emp.name} - ${doc.label}` });
+                                  }}
+                                  className={`w-12 h-12 flex flex-col items-center justify-center rounded-xl border-2 transition-all ${hasDoc ? 'border-rose-500 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:scale-105 shadow-sm cursor-pointer' : 'border-slate-200 bg-slate-50 text-slate-300 opacity-50 cursor-not-allowed'}`}
+                                  title={hasDoc ? `View ${doc.label}` : `No ${doc.label} uploaded`}
+                                >
+                                  <span className="font-black text-[9px] uppercase tracking-tighter leading-none mt-1">{doc.label}</span>
+                                </button>
+                              );
+                            })}
+                         </div>
+
                       </div>
-                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${isExpanded ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-50 text-slate-400 border border-slate-100'}`}>
+                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all shrink-0 ${isExpanded ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-50 text-slate-400 border border-slate-100'}`}>
                          {isExpanded ? <ChevronUp size={24} /> : <ChevronDown size={24} />}
                       </div>
                    </div>
@@ -178,24 +209,19 @@ export default function EmployeeProfiles({ employees }) {
 
                             <div className="mt-12 flex flex-col gap-6 w-72 mx-auto text-[11px] text-center">
                                <div className="w-full">
-                                  <div className="border-b border-black w-full h-5 flex items-end justify-center pb-[2px]">
-                                     <span className="font-bold text-sm leading-none">{emp.name}</span>
-                                  </div>
+                                  <div className="border-b border-black w-full h-5 flex items-end justify-center pb-[2px]"><span className="font-bold text-sm leading-none">{emp.name}</span></div>
                                   <p className="mt-1 text-gray-800">Prepared By:</p>
                                </div>
                                <div className="w-full">
-                                  <div className="border-b border-black w-full h-5 flex items-end justify-center pb-[2px]">
-                                     <span className="font-bold text-sm leading-none">Glaiza P. Santos</span>
-                                  </div>
+                                  <div className="border-b border-black w-full h-5 flex items-end justify-center pb-[2px]"><span className="font-bold text-sm leading-none">Glaiza P. Santos</span></div>
                                   <p className="mt-1 text-gray-800">Checked By:</p>
                                </div>
                                <div className="w-full">
-                                  <div className="border-b border-black w-full h-5 flex items-end justify-center pb-[2px]">
-                                     <span className="font-bold text-sm leading-none">Jose Alexander H. Santos</span>
-                                  </div>
+                                  <div className="border-b border-black w-full h-5 flex items-end justify-center pb-[2px]"><span className="font-bold text-sm leading-none">Jose Alexander H. Santos</span></div>
                                   <p className="mt-1 text-gray-800">Approved By:</p>
                                </div>
                             </div>
+
                           </div>
                         </div>
 
@@ -284,6 +310,32 @@ export default function EmployeeProfiles({ employees }) {
             );
         })}
       </div>
+
+      {/* --- NEW: DOCUMENT VIEWER POPUP MODAL --- */}
+      {viewingDoc && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95">
+            <div className="flex justify-between items-center p-4 border-b border-slate-100 bg-slate-50">
+              <h3 className="font-black uppercase tracking-widest text-slate-800">{viewingDoc.title}</h3>
+              <button onClick={() => setViewingDoc(null)} className="p-2 bg-white text-slate-500 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-colors shadow-sm border border-slate-200">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="flex-1 bg-slate-200 overflow-hidden relative flex items-center justify-center">
+              {viewingDoc.url.toLowerCase().includes('.pdf') ? (
+                <iframe src={viewingDoc.url} className="w-full h-full border-0" title="PDF Document" />
+              ) : (
+                <img src={viewingDoc.url} alt="Document" className="w-full h-full object-contain" />
+              )}
+            </div>
+            <div className="p-4 border-t border-slate-100 bg-white flex justify-end">
+              <a href={viewingDoc.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-indigo-700 transition-colors">
+                <ExternalLink size={16} /> Open in New Tab
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
