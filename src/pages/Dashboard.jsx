@@ -358,17 +358,6 @@ export default function Dashboard({ employees }) {
     </h3>
     <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest flex items-center gap-1">From <MapPin size={10}/> Bulakan HQ</p>
   </div>
-  
-  {/* --- NEW GEOLOCATOR BUTTON --- */}
-  <a 
-    href="https://jahs-geolocator.vercel.app/" 
-    target="_blank" 
-    rel="noopener noreferrer"
-    className="p-2.5 bg-indigo-50 text-indigo-600 rounded-2xl hover:bg-indigo-100 transition-all hover:scale-105 active:scale-95 border border-indigo-100"
-    title="Open Geolocator"
-  >
-    <MapPin size={20} />
-  </a>
 </div>
 
               {/* Destination Search Bar */}

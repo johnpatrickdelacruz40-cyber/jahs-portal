@@ -1,4 +1,5 @@
 import React from 'react';
+import { RadioTower, Signal, Globe, ShoppingCart, MapPin } from 'lucide-react'
 import { 
   LayoutDashboard, Users, UserSquare, CalendarCheck, 
   ShieldAlert, FileClock, LogOut, X 
@@ -78,6 +79,51 @@ export default function Sidebar({ isOpen, setIsOpen, activeTab, setActiveTab, is
         </div>
 
         {/* Admin Login / Logout Footer */}
+        {/* --- QUICK LINKS COMMAND CENTER --- */}
+        <div className="mb-6 px-4 relative">
+          
+          {/* CSS for the Hover Wiggle Animation */}
+          <style>{`
+            @keyframes icon-wiggle {
+              0% { transform: rotate(0deg) scale(1.15); }
+              25% { transform: rotate(-15deg) scale(1.15); }
+              50% { transform: rotate(15deg) scale(1.15); }
+              75% { transform: rotate(-15deg) scale(1.15); }
+              100% { transform: rotate(0deg) scale(1.15); }
+            }
+            .hover-wiggle:hover svg {
+              animation: icon-wiggle 0.4s ease-in-out forwards;
+            }
+          `}</style>
+
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-3 px-2">Quick Links</p>
+          <div className="flex items-center justify-between bg-slate-800/50 p-2 rounded-2xl border border-slate-700/50 shadow-inner">
+            
+            <a href="https://appcodeplatform.ericsson.net/ConnectedSupplier_Requests/OpenRequests_List.aspx?ShowResults=True" target="_blank" rel="noopener noreferrer" className="p-2.5 text-slate-400 hover:text-white hover:bg-slate-700 rounded-xl transition-colors hover-wiggle" title="Ericsson SP2P">
+              <RadioTower size={18} className="transition-transform duration-300" />
+            </a>
+            
+            <a href="https://service.ariba.com/Authenticator.aw/ad/ssoIDP" target="_blank" rel="noopener noreferrer" className="p-2.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-400/10 rounded-xl transition-colors hover-wiggle" title="SMART Ariba">
+              <Signal size={18} className="transition-transform duration-300" />
+            </a>
+            
+            <a href="https://service.ariba.com/Sourcing.aw/109555006/aw?awh=r&awssk=Yg4UM5Yz&dard=1" target="_blank" rel="noopener noreferrer" className="p-2.5 text-slate-400 hover:text-blue-400 hover:bg-blue-400/10 rounded-xl transition-colors hover-wiggle" title="Globe Ariba">
+              <Globe size={18} className="transition-transform duration-300" />
+            </a>
+            
+            <a href="https://shopee.ph/shop/66780887/recommendation-landing?pageNumber=2&upstream=cart" target="_blank" rel="noopener noreferrer" className="p-2.5 text-slate-400 hover:text-orange-400 hover:bg-orange-400/10 rounded-xl transition-colors hover-wiggle" title="Shopee Material Orders">
+              <ShoppingCart size={18} className="transition-transform duration-300" />
+            </a>
+            
+            <div className="w-px h-6 bg-slate-700 mx-1"></div> {/* Divider */}
+            
+            <a href="https://jahs-geolocator.vercel.app/" target="_blank" rel="noopener noreferrer" className="group p-2.5 text-slate-400 hover:text-rose-400 hover:bg-rose-400/10 rounded-xl transition-colors" title="JAHS Geolocator">
+              {/* Using a smooth 360 SPIN and scale specifically for the Map Pin! */}
+              <MapPin size={18} className="transition-all duration-500 group-hover:rotate-[360deg] group-hover:scale-110" />
+            </a>
+
+          </div>
+        </div>
         <div className="p-6 border-t border-slate-800">
           {!isAdmin ? (
             <button

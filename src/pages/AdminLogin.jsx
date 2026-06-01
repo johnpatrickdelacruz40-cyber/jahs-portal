@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Shield, Lock, User, ArrowRight } from 'lucide-react';
+import { RadioTower, Signal, Globe, ShoppingCart, MapPin } from 'lucide-react';
 
 export default function AdminLogin({ onLogin }) {
   const [username, setUsername] = useState('');
@@ -64,4 +65,33 @@ export default function AdminLogin({ onLogin }) {
       </div>
     </div>
   );
-}
+  
+}{/* --- QUICK LINKS COMMAND CENTER --- */}
+        <div className="mb-6 px-4">
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-3 px-2">Quick Links</p>
+          <div className="flex items-center justify-between bg-slate-800/50 p-2 rounded-2xl border border-slate-700/50 shadow-inner">
+            
+            <a href="https://appcodeplatform.ericsson.net/ConnectedSupplier_Requests/OpenRequests_List.aspx?ShowResults=True" target="_blank" rel="noopener noreferrer" className="p-2.5 text-slate-400 hover:text-white hover:bg-slate-700 rounded-xl transition-all" title="Ericsson SP2P">
+              <RadioTower size={18} />
+            </a>
+            
+            <a href="https://service.ariba.com/Authenticator.aw/ad/ssoIDP" target="_blank" rel="noopener noreferrer" className="p-2.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-400/10 rounded-xl transition-all" title="SMART Ariba">
+              <Signal size={18} />
+            </a>
+            
+            <a href="https://service.ariba.com/Sourcing.aw/109555006/aw?awh=r&awssk=Yg4UM5Yz&dard=1" target="_blank" rel="noopener noreferrer" className="p-2.5 text-slate-400 hover:text-blue-400 hover:bg-blue-400/10 rounded-xl transition-all" title="Globe Ariba">
+              <Globe size={18} />
+            </a>
+            
+            <a href="https://shopee.ph/shop/66780887/recommendation-landing?pageNumber=2&upstream=cart" target="_blank" rel="noopener noreferrer" className="p-2.5 text-slate-400 hover:text-orange-400 hover:bg-orange-400/10 rounded-xl transition-all" title="Shopee Material Orders">
+              <ShoppingCart size={18} />
+            </a>
+            
+            <div className="w-px h-6 bg-slate-700 mx-1"></div> {/* Divider */}
+            
+            <a href="https://jahs-geolocator.vercel.app/" target="_blank" rel="noopener noreferrer" className="p-2.5 text-slate-400 hover:text-rose-400 hover:bg-rose-400/10 rounded-xl transition-all" title="JAHS Geolocator">
+              <MapPin size={18} />
+            </a>
+
+          </div>
+        </div>
