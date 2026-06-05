@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { Search, ChevronLeft, ChevronRight, User, ChevronDown, ChevronUp, Printer, FileText, X, ExternalLink } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, User, ChevronDown, ChevronUp, Printer, FileText, X, ExternalLink, Loader2 } from 'lucide-react';
 
 const getDBDateStr = (dateObj) => {
   const year = dateObj.getFullYear();
@@ -9,8 +9,16 @@ const getDBDateStr = (dateObj) => {
   return `${year}-${month}-${day}`;
 };
 
-export default function EmployeeProfiles({ employees }) {
+export default function EmployeeProfiles() {
+  // --- PAGINATION & SEARCH STATE ---
+  const [localEmployees, setLocalEmployees] = useState([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
+  const [page, setPage] = useState(0);
+  const [isLoadingList, setIsLoadingList] = useState(true);
+  const ITEMS_PER_PAGE = 5;
+
+  // --- DTR & LOG STATE ---
   const [viewDate, setViewDate] = useState(new Date());
   const [attendanceLogs, setAttendanceLogs] = useState({});
   const [dtrDetails, setDtrDetails] = useState({}); 
@@ -19,7 +27,6 @@ export default function EmployeeProfiles({ employees }) {
   // --- DOCUMENT VIEWER STATE & CONFIG ---
   const [viewingDoc, setViewingDoc] = useState(null);
   
-  // JAHS ID added back to the top of the list!
   const DOCUMENT_TYPES = [
     { key: 'jahs_id_url', label: 'JAHS ID' },
     { key: 'govt_id_url', label: 'GOVT ID' },
@@ -48,8 +55,46 @@ export default function EmployeeProfiles({ employees }) {
     d.setDate(d.getDate() + 1); 
   }
 
+  // --- SERVER-SIDE FETCH: EMPLOYEES ---
+  const fetchPaginatedEmployees = async () => {
+    setIsLoadingList(true);
+    let query = supabase.from('employees').select('*', { count: 'exact' });
+
+    if (searchTerm) {
+      query = query.ilike('name', `%${searchTerm}%`);
+    }
+
+    const from = page * ITEMS_PER_PAGE;
+    const to = from + ITEMS_PER_PAGE - 1;
+
+    query = query.range(from, to).order('name', { ascending: true });
+
+    const { data, count, error } = await query;
+    if (!error) {
+      setLocalEmployees(data);
+      setTotalCount(count);
+    } else {
+      console.error("Error fetching data:", error);
+    }
+    setIsLoadingList(false);
+  };
+
+  // --- SERVER-SIDE FETCH: ATTENDANCE LOGS (OPTIMIZED) ---
   const fetchLogs = async () => {
-    const { data } = await supabase.from('attendance_logs').select('*');
+    const startStr = getDBDateStr(currentCutoff.start);
+    const endStr = getDBDateStr(currentCutoff.end);
+
+    // FIX: Only download logs for the exact 15-day window we are viewing to save massive bandwidth
+    const { data, error } = await supabase.from('attendance_logs')
+      .select('*')
+      .gte('log_date', startStr)
+      .lte('log_date', endStr);
+
+    if (error) {
+      console.error("Error fetching logs:", error);
+      return;
+    }
+
     const mappedStatus = {};
     const mappedDetails = {};
     
@@ -66,7 +111,17 @@ export default function EmployeeProfiles({ employees }) {
     setDtrDetails(mappedDetails);
   };
 
+  // Trigger re-fetches when states change
+  useEffect(() => { fetchPaginatedEmployees(); }, [page, searchTerm]);
   useEffect(() => { fetchLogs(); }, [viewDate]);
+
+  const handleSearchChange = (e) => {
+    setSearchTerm(e.target.value);
+    setPage(0); 
+    setExpandedId(null); // Close expanded profiles when searching
+  };
+
+  const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
 
   return (
     <div className="h-full relative">
@@ -82,163 +137,199 @@ export default function EmployeeProfiles({ employees }) {
            </div>
            <div className="relative w-full md:w-80">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-              <input type="text" placeholder="Find profile..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm font-bold outline-none focus:ring-4 focus:ring-indigo-500/5 transition-all" />
+              <input type="text" placeholder="Search profile..." value={searchTerm} onChange={handleSearchChange} className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm font-bold outline-none focus:ring-4 focus:ring-indigo-500/5 transition-all" />
            </div>
          </div>
 
-         <div className="grid grid-cols-1 gap-6">
-            {employees.filter(e => e.name.toLowerCase().includes(searchTerm.toLowerCase())).map(emp => {
-              const isExpanded = expandedId === emp.id;
-              let present = 0, leave = 0, noWork = 0;
+         <div className="min-h-[400px]">
+            {isLoadingList ? (
+              <div className="flex justify-center items-center h-64 text-slate-400">
+                <Loader2 className="animate-spin" size={32} />
+              </div>
+            ) : localEmployees.length === 0 ? (
+              <div className="text-center py-12 text-slate-400 font-bold bg-white border border-slate-200 rounded-[2.5rem] shadow-sm">
+                No personnel records found.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-6">
+                {localEmployees.map(emp => {
+                  const isExpanded = expandedId === emp.id;
+                  let present = 0, leave = 0, noWork = 0;
 
-              cutoffDays.forEach(d => {
-                const dbDate = getDBDateStr(d);
-                if (dbDate > getDBDateStr(new Date())) return; 
-                const status = attendanceLogs[`${emp.id}-${dbDate}`];
-                if (status === 'present') present++; else if (status === 'leave') leave++; else if (status === 'absent' || !status) noWork++;
-              });
+                  cutoffDays.forEach(d => {
+                    const dbDate = getDBDateStr(d);
+                    if (dbDate > getDBDateStr(new Date())) return; 
+                    const status = attendanceLogs[`${emp.id}-${dbDate}`];
+                    if (status === 'present') present++; else if (status === 'leave') leave++; else if (status === 'absent' || !status) noWork++;
+                  });
 
-              return (
-                <div key={emp.id} className={`bg-white border border-slate-200 rounded-[2.5rem] shadow-sm overflow-hidden transition-all duration-300 ${isExpanded ? 'ring-4 ring-indigo-500/10' : 'hover:shadow-md'}`}>
-                   
-                   <div onClick={() => setExpandedId(isExpanded ? null : emp.id)} className="p-8 flex items-center justify-between cursor-pointer hover:bg-slate-50/50 transition-colors">
-                      <div className="flex flex-col md:flex-row md:items-center gap-6">
-                         <div className="w-20 h-20 rounded-[1.5rem] border-4 border-slate-50 shadow-sm overflow-hidden bg-white p-1 shrink-0">
-                            {emp.photo ? <img src={emp.photo} className="w-full h-full object-cover rounded-xl" /> : <User className="text-slate-200 m-auto h-full" size={32} />}
-                         </div>
-                         <div>
-                            <h4 className="text-2xl font-black text-slate-900 leading-tight tracking-tight">{emp.name}</h4>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">{emp.idNo}</p>
-                         </div>
-                         
-                         {/* --- DOCUMENT BUTTONS --- */}
-                         <div className="flex flex-wrap items-center gap-2 md:ml-4" onClick={(e) => e.stopPropagation()}>
-                            {DOCUMENT_TYPES.map((doc) => {
-                              const fileUrl = emp[doc.key];
-                              const hasDoc = !!fileUrl;
-                              return (
-                                <button
-                                  key={doc.key}
-                                  disabled={!hasDoc}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (hasDoc) setViewingDoc({ url: fileUrl, title: `${emp.name} - ${doc.label}` });
-                                  }}
-                                  className={`w-12 h-12 flex flex-col items-center justify-center rounded-xl border-2 transition-all ${hasDoc ? 'border-rose-500 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:scale-105 shadow-sm cursor-pointer' : 'border-slate-200 bg-slate-50 text-slate-300 opacity-50 cursor-not-allowed'}`}
-                                  title={hasDoc ? `View ${doc.label}` : `No ${doc.label} uploaded`}
-                                >
-                                  <span className="font-black text-[9px] uppercase tracking-tighter leading-none mt-1">{doc.label}</span>
-                                </button>
-                              );
-                            })}
-                         </div>
+                  return (
+                    <div key={emp.id} className={`bg-white border border-slate-200 rounded-[2.5rem] shadow-sm overflow-hidden transition-all duration-300 ${isExpanded ? 'ring-4 ring-indigo-500/10' : 'hover:shadow-md'}`}>
+                       
+                       <div onClick={() => setExpandedId(isExpanded ? null : emp.id)} className="p-8 flex items-center justify-between cursor-pointer hover:bg-slate-50/50 transition-colors">
+                          <div className="flex flex-col md:flex-row md:items-center gap-6">
+                             <div className="w-20 h-20 rounded-[1.5rem] border-4 border-slate-50 shadow-sm overflow-hidden bg-white p-1 shrink-0">
+                                {emp.photo ? <img src={emp.photo} className="w-full h-full object-cover rounded-xl" /> : <User className="text-slate-200 m-auto h-full" size={32} />}
+                             </div>
+                             <div>
+                                <h4 className="text-2xl font-black text-slate-900 leading-tight tracking-tight">{emp.name}</h4>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">{emp.idNo}</p>
+                             </div>
+                             
+                             {/* --- DOCUMENT BUTTONS --- */}
+                             <div className="flex flex-wrap items-center gap-2 md:ml-4" onClick={(e) => e.stopPropagation()}>
+                                {DOCUMENT_TYPES.map((doc) => {
+                                  const fileUrl = emp[doc.key];
+                                  const hasDoc = !!fileUrl;
+                                  return (
+                                    <button
+                                      key={doc.key}
+                                      disabled={!hasDoc}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (hasDoc) setViewingDoc({ url: fileUrl, title: `${emp.name} - ${doc.label}` });
+                                      }}
+                                      className={`w-12 h-12 flex flex-col items-center justify-center rounded-xl border-2 transition-all ${hasDoc ? 'border-rose-500 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:scale-105 shadow-sm cursor-pointer' : 'border-slate-200 bg-slate-50 text-slate-300 opacity-50 cursor-not-allowed'}`}
+                                      title={hasDoc ? `View ${doc.label}` : `No ${doc.label} uploaded`}
+                                    >
+                                      <span className="font-black text-[9px] uppercase tracking-tighter leading-none mt-1">{doc.label}</span>
+                                    </button>
+                                  );
+                                })}
+                             </div>
 
-                      </div>
-                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all shrink-0 ${isExpanded ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-50 text-slate-400 border border-slate-100'}`}>
-                         {isExpanded ? <ChevronUp size={24} /> : <ChevronDown size={24} />}
-                      </div>
-                   </div>
-
-                   {isExpanded && (
-                     <div className="border-t border-slate-100 bg-slate-50 animate-in slide-in-from-top-2">
-                        
-                        <div className="p-6 flex justify-between items-center bg-white border-b border-slate-200">
-                          <div className="flex items-center gap-3">
-                            <FileText size={18} className="text-indigo-600" />
-                            <div>
-                              <p className="font-bold text-slate-900 text-sm">Standard DTR View</p>
-                              <p className="text-[10px] text-slate-400 uppercase tracking-widest font-black mt-0.5">Read-only system records (Synced with Admin Edits)</p>
-                            </div>
                           </div>
-                          <button onClick={() => window.print()} className="flex items-center gap-2 px-8 py-4 bg-slate-900 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl hover:shadow-2xl">
-                            <Printer size={16}/> Print Standard DTR
-                          </button>
-                        </div>
+                          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all shrink-0 ${isExpanded ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-50 text-slate-400 border border-slate-100'}`}>
+                             {isExpanded ? <ChevronUp size={24} /> : <ChevronDown size={24} />}
+                          </div>
+                       </div>
 
-                        <div className="p-8 md:p-12 overflow-x-auto print:p-0 print:overflow-visible">
-                          <div className="bg-white max-w-3xl mx-auto shadow-2xl print:shadow-none border border-slate-200 print:border-none p-10 md:p-14 print:p-0 min-h-[1000px] pointer-events-none">
+                       {isExpanded && (
+                         <div className="border-t border-slate-100 bg-slate-50 animate-in slide-in-from-top-2">
                             
-                            <div className="flex items-start gap-5 mb-4">
-                              <div className="w-20 h-20 flex items-center justify-center border border-black p-1"><img src="/logo.png" className="w-full h-full object-contain grayscale" alt="Logo" onError={(e) => e.target.src='https://via.placeholder.com/80?text=LOGO'} /></div>
-                              <div>
-                                <h1 className="text-4xl font-black tracking-[0.2em] leading-none text-gray-800">JAHS</h1>
-                                <p className="font-bold tracking-[0.3em] text-[10px] uppercase mt-2">Electronic and Electrical Services</p>
-                                <p className="text-xs leading-tight text-gray-800 mt-1">#424 Brgy Balubad, Bulacan, Bulacan<br/>Tel: 792-0595</p>
+                            <div className="p-6 flex justify-between items-center bg-white border-b border-slate-200">
+                              <div className="flex items-center gap-3">
+                                <FileText size={18} className="text-indigo-600" />
+                                <div>
+                                  <p className="font-bold text-slate-900 text-sm">Standard DTR View</p>
+                                  <p className="text-[10px] text-slate-400 uppercase tracking-widest font-black mt-0.5">Read-only system records (Synced with Admin Edits)</p>
+                                </div>
+                              </div>
+                              <button onClick={() => window.print()} className="flex items-center gap-2 px-8 py-4 bg-slate-900 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl hover:shadow-2xl">
+                                <Printer size={16}/> Print Standard DTR
+                              </button>
+                            </div>
+
+                            <div className="p-8 md:p-12 overflow-x-auto print:p-0 print:overflow-visible">
+                              <div className="bg-white max-w-3xl mx-auto shadow-2xl print:shadow-none border border-slate-200 print:border-none p-10 md:p-14 print:p-0 min-h-[1000px] pointer-events-none">
+                                
+                                <div className="flex items-start gap-5 mb-4">
+                                  <div className="w-20 h-20 flex items-center justify-center border border-black p-1"><img src="/logo.png" className="w-full h-full object-contain grayscale" alt="Logo" onError={(e) => e.target.src='https://via.placeholder.com/80?text=LOGO'} /></div>
+                                  <div>
+                                    <h1 className="text-4xl font-black tracking-[0.2em] leading-none text-gray-800">JAHS</h1>
+                                    <p className="font-bold tracking-[0.3em] text-[10px] uppercase mt-2">Electronic and Electrical Services</p>
+                                    <p className="text-xs leading-tight text-gray-800 mt-1">#424 Brgy Balubad, Bulacan, Bulacan<br/>Tel: 792-0595</p>
+                                  </div>
+                                </div>
+
+                                <div className="border-t-2 border-black border-b-2 py-1.5 mb-6 text-center font-bold uppercase tracking-[0.5em] text-sm bg-gray-50 mt-6">Daily Time Record</div>
+                                
+                                <div className="mb-6 text-sm flex items-end">
+                                  <span className="font-bold">Name:</span>
+                                  <div className="font-bold border-b border-black ml-3 flex-1 px-2 py-0.5">{emp.name}</div>
+                                </div>
+
+                                <table className="w-full border-collapse border-2 border-black text-center text-xs">
+                                  <thead>
+                                    <tr className="bg-gray-100">
+                                      <th className="border border-black py-3 w-1/5 uppercase text-[11px]">Date</th>
+                                      <th className="border border-black py-3 w-1/4 uppercase text-[11px]">Time-In</th>
+                                      <th className="border border-black py-3 w-1/4 uppercase text-[11px]">Time-Out</th>
+                                      <th className="border border-black py-3 w-[30%] uppercase text-[11px]">Activity</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {cutoffDays.map((date, i) => {
+                                      const dbDate = getDBDateStr(date);
+                                      const isFuture = dbDate > getDBDateStr(new Date()); 
+                                      const status = isFuture ? null : attendanceLogs[`${emp.id}-${dbDate}`];
+                                      
+                                      const details = dtrDetails[`${emp.id}-${dbDate}`] || {};
+                                      
+                                      let dIn = details.timeIn ? details.timeIn : (status === 'present' ? '08:00 AM' : '-');
+                                      let dOut = details.timeOut ? details.timeOut : (status === 'present' ? '05:00 PM' : '-');
+                                      let dAct = details.activity ? details.activity : (status === 'leave' ? 'OFFICIAL LEAVE' : (status === 'absent' ? 'NO WORK' : '-'));
+                                      let rowStyle = (status === 'leave' || status === 'absent') ? "text-gray-500 bg-gray-50" : "";
+
+                                      return (
+                                        <tr key={i} className={`h-8 ${rowStyle}`}>
+                                          <td className="border border-black font-bold text-[10px] bg-gray-100/50">
+                                            {date.toLocaleDateString('en-US', { month: 'short', day: '2-digit' })} ({date.toLocaleDateString('en-US', { weekday: 'short' })})
+                                          </td>
+                                          <td className="border border-black font-mono text-[11px] uppercase">{dIn}</td>
+                                          <td className="border border-black font-mono text-[11px] uppercase">{dOut}</td>
+                                          <td className="border border-black font-bold text-[10px] uppercase">{dAct}</td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+
+                                <div className="mt-12 flex flex-col gap-6 w-72 mx-auto text-[11px] text-center">
+                                   <div className="w-full">
+                                      <div className="border-b border-black w-full h-5 flex items-end justify-center pb-[2px]"><span className="font-bold text-sm leading-none">{emp.name}</span></div>
+                                      <p className="mt-1 text-gray-800">Prepared By:</p>
+                                   </div>
+                                   <div className="w-full">
+                                      <div className="border-b border-black w-full h-5 flex items-end justify-center pb-[2px]"><span className="font-bold text-sm leading-none">Glaiza P. Santos</span></div>
+                                      <p className="mt-1 text-gray-800">Checked By:</p>
+                                   </div>
+                                   <div className="w-full">
+                                      <div className="border-b border-black w-full h-5 flex items-end justify-center pb-[2px]"><span className="font-bold text-sm leading-none">Jose Alexander H. Santos</span></div>
+                                      <p className="mt-1 text-gray-800">Approved By:</p>
+                                   </div>
+                                </div>
+
                               </div>
                             </div>
 
-                            <div className="border-t-2 border-black border-b-2 py-1.5 mb-6 text-center font-bold uppercase tracking-[0.5em] text-sm bg-gray-50 mt-6">Daily Time Record</div>
-                            
-                            <div className="mb-6 text-sm flex items-end">
-                              <span className="font-bold">Name:</span>
-                              <div className="font-bold border-b border-black ml-3 flex-1 px-2 py-0.5">{emp.name}</div>
-                            </div>
+                         </div>
+                       )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+         </div>
 
-                            <table className="w-full border-collapse border-2 border-black text-center text-xs">
-                              <thead>
-                                <tr className="bg-gray-100">
-                                  <th className="border border-black py-3 w-1/5 uppercase text-[11px]">Date</th>
-                                  <th className="border border-black py-3 w-1/4 uppercase text-[11px]">Time-In</th>
-                                  <th className="border border-black py-3 w-1/4 uppercase text-[11px]">Time-Out</th>
-                                  <th className="border border-black py-3 w-[30%] uppercase text-[11px]">Activity</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {cutoffDays.map((date, i) => {
-                                  const dbDate = getDBDateStr(date);
-                                  const isFuture = dbDate > getDBDateStr(new Date()); 
-                                  const status = isFuture ? null : attendanceLogs[`${emp.id}-${dbDate}`];
-                                  
-                                  const details = dtrDetails[`${emp.id}-${dbDate}`] || {};
-                                  
-                                  let dIn = details.timeIn ? details.timeIn : (status === 'present' ? '08:00 AM' : '-');
-                                  let dOut = details.timeOut ? details.timeOut : (status === 'present' ? '05:00 PM' : '-');
-                                  let dAct = details.activity ? details.activity : (status === 'leave' ? 'OFFICIAL LEAVE' : (status === 'absent' ? 'NO WORK' : '-'));
-                                  let rowStyle = (status === 'leave' || status === 'absent') ? "text-gray-500 bg-gray-50" : "";
-
-                                  return (
-                                    <tr key={i} className={`h-8 ${rowStyle}`}>
-                                      <td className="border border-black font-bold text-[10px] bg-gray-100/50">
-                                        {date.toLocaleDateString('en-US', { month: 'short', day: '2-digit' })} ({date.toLocaleDateString('en-US', { weekday: 'short' })})
-                                      </td>
-                                      <td className="border border-black font-mono text-[11px] uppercase">{dIn}</td>
-                                      <td className="border border-black font-mono text-[11px] uppercase">{dOut}</td>
-                                      <td className="border border-black font-bold text-[10px] uppercase">{dAct}</td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
-
-                            <div className="mt-12 flex flex-col gap-6 w-72 mx-auto text-[11px] text-center">
-                               <div className="w-full">
-                                  <div className="border-b border-black w-full h-5 flex items-end justify-center pb-[2px]"><span className="font-bold text-sm leading-none">{emp.name}</span></div>
-                                  <p className="mt-1 text-gray-800">Prepared By:</p>
-                               </div>
-                               <div className="w-full">
-                                  <div className="border-b border-black w-full h-5 flex items-end justify-center pb-[2px]"><span className="font-bold text-sm leading-none">Glaiza P. Santos</span></div>
-                                  <p className="mt-1 text-gray-800">Checked By:</p>
-                               </div>
-                               <div className="w-full">
-                                  <div className="border-b border-black w-full h-5 flex items-end justify-center pb-[2px]"><span className="font-bold text-sm leading-none">Jose Alexander H. Santos</span></div>
-                                  <p className="mt-1 text-gray-800">Approved By:</p>
-                               </div>
-                            </div>
-
-                          </div>
-                        </div>
-
-                     </div>
-                   )}
-                </div>
-              )
-            })}
+         {/* --- PAGINATION CONTROLS --- */}
+         <div className="mt-6 p-6 bg-white border border-slate-200 rounded-[2rem] shadow-sm flex items-center justify-between">
+           <p className="text-xs font-bold text-slate-400">
+             Showing {totalCount === 0 ? 0 : page * ITEMS_PER_PAGE + 1} to {Math.min((page + 1) * ITEMS_PER_PAGE, totalCount)} of {totalCount} profiles
+           </p>
+           <div className="flex gap-2">
+             <button 
+               onClick={() => setPage(p => Math.max(0, p - 1))} 
+               disabled={page === 0 || isLoadingList}
+               className="p-3 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm">
+               <ChevronLeft size={16} strokeWidth={3} />
+             </button>
+             <div className="px-4 py-3 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600 font-black text-xs min-w-[3rem] text-center shadow-inner flex items-center justify-center">
+               {page + 1} / {totalPages || 1}
+             </div>
+             <button 
+               onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} 
+               disabled={page >= totalPages - 1 || isLoadingList}
+               className="p-3 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm">
+               <ChevronRight size={16} strokeWidth={3} />
+             </button>
+           </div>
          </div>
       </div>
 
       {/* --- PRINT ONLY VIEW FOR PUBLIC PROFILE --- */}
       <div className="hidden print:block text-black bg-white p-4 font-sans max-w-3xl mx-auto">
-        {employees.filter(e => e.id === expandedId).map(emp => {
+        {localEmployees.filter(e => e.id === expandedId).map(emp => {
             return (
               <div key={`print-dtr-${emp.id}`} className="flex flex-col h-[95vh]">
                 

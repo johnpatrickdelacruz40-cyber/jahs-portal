@@ -1,17 +1,26 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { Search, Plus, Edit2, Trash2, X, Camera, User, Loader2 } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, X, Camera, User, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import imageCompression from 'browser-image-compression';
 
-export default function Employees({ employees, refreshData, logHistory }) {
+// Note: You no longer need to pass the 'employees' array as a prop, 
+// as this component now fetches exactly what it needs directly.
+export default function Employees({ refreshParentData, logHistory }) {
+  // --- PAGINATION & SEARCH STATE ---
+  const [localEmployees, setLocalEmployees] = useState([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
+  const [page, setPage] = useState(0);
+  const [isLoadingList, setIsLoadingList] = useState(true);
+  const ITEMS_PER_PAGE = 5;
+
+  // --- MODAL & FORM STATE ---
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef(null);
   
-  const [formData, setFormData] = useState({ idNo: '', name: '', photo: null });
-
-  // --- DOCUMENT UPLOAD STATE ---
+  const [formData, setFormData] = useState({ idNo: '', name: '', photo: null, photoFile: null });
   const [selectedDocs, setSelectedDocs] = useState({});
   const [existingDocs, setExistingDocs] = useState({});
   
@@ -25,27 +34,68 @@ export default function Employees({ employees, refreshData, logHistory }) {
     { key: 'signature_url', label: 'SIGN' }
   ];
 
-  const handlePhotoUpload = (e) => {
+  // --- SERVER-SIDE FETCH & SEARCH ---
+  const fetchPaginatedData = async () => {
+    setIsLoadingList(true);
+    let query = supabase.from('employees').select('*', { count: 'exact' });
+
+    // If typing in search, ask Supabase to filter the whole database
+    if (searchTerm) {
+      query = query.ilike('name', `%${searchTerm}%`);
+    }
+
+    // Calculate our 5-item chunk
+    const from = page * ITEMS_PER_PAGE;
+    const to = from + ITEMS_PER_PAGE - 1;
+
+    query = query.range(from, to).order('name', { ascending: true });
+
+    const { data, count, error } = await query;
+    if (!error) {
+      setLocalEmployees(data);
+      setTotalCount(count);
+    } else {
+      console.error("Error fetching data:", error);
+    }
+    setIsLoadingList(false);
+  };
+
+  // Run fetch whenever page or search term changes
+  useEffect(() => {
+    fetchPaginatedData();
+  }, [page, searchTerm]);
+
+  // Reset to page 0 when user types a new search
+  const handleSearchChange = (e) => {
+    setSearchTerm(e.target.value);
+    setPage(0); 
+  };
+
+  // --- EXISTING COMPRESS & UPLOAD LOGIC ---
+  const handlePhotoUpload = async (e) => {
     const file = e.target.files[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => setFormData({ ...formData, photo: reader.result });
-      reader.readAsDataURL(file);
+      const options = { maxSizeMB: 0.1, maxWidthOrHeight: 800, useWebWorker: true };
+      try {
+        const compressedFile = await imageCompression(file, options);
+        const previewUrl = URL.createObjectURL(compressedFile);
+        setFormData({ ...formData, photo: previewUrl, photoFile: compressedFile });
+      } catch (error) {
+        console.error("Compression error:", error);
+      }
     }
   };
 
   const openModal = (emp = null) => {
     if (emp) { 
-      setFormData({ idNo: emp.idNo || '', name: emp.name, photo: emp.photo }); 
+      setFormData({ idNo: emp.idNo || '', name: emp.name, photo: emp.photo, photoFile: null }); 
       setEditingId(emp.id); 
       setExistingDocs({
-        jahs_id_url: emp.jahs_id_url,
-        govt_id_url: emp.govt_id_url, wah_url: emp.wah_url, 
-        so2_url: emp.so2_url, ncii_url: emp.ncii_url, 
-        nbi_url: emp.nbi_url, signature_url: emp.signature_url
+        jahs_id_url: emp.jahs_id_url, govt_id_url: emp.govt_id_url, wah_url: emp.wah_url, 
+        so2_url: emp.so2_url, ncii_url: emp.ncii_url, nbi_url: emp.nbi_url, signature_url: emp.signature_url
       });
     } else { 
-      setFormData({ idNo: '', name: '', photo: null }); 
+      setFormData({ idNo: '', name: '', photo: null, photoFile: null }); 
       setEditingId(null); 
       setExistingDocs({});
     }
@@ -53,15 +103,19 @@ export default function Employees({ employees, refreshData, logHistory }) {
     setIsModalOpen(true);
   };
 
-  // --- HELPER TO UPLOAD FILES TO SUPABASE ---
   const uploadDocument = async (file, employeeName, docType) => {
     if (!file) return null;
+    let fileToUpload = file;
+    if (file.type.startsWith('image/')) {
+      const options = { maxSizeMB: 0.2, maxWidthOrHeight: 1200, useWebWorker: true };
+      try { fileToUpload = await imageCompression(file, options); } catch (e) {}
+    }
     const cleanName = employeeName.replace(/[^a-zA-Z0-9]/g, '_');
-    const fileExt = file.name.split('.').pop();
+    const fileExt = fileToUpload.name.split('.').pop();
     const filePath = `${cleanName}/${docType}_${Date.now()}.${fileExt}`;
     
-    const { error } = await supabase.storage.from('employee-documents').upload(filePath, file);
-    if (error) { console.error(`Error uploading ${docType}:`, error); return null; }
+    const { error } = await supabase.storage.from('employee-documents').upload(filePath, fileToUpload);
+    if (error) return null;
     
     const { data: publicUrlData } = supabase.storage.from('employee-documents').getPublicUrl(filePath);
     return publicUrlData.publicUrl;
@@ -72,28 +126,22 @@ export default function Employees({ employees, refreshData, logHistory }) {
     if (isSubmitting) return; 
     setIsSubmitting(true);
 
-    // --- PROCESS DOCUMENT UPLOADS AND DELETIONS ---
     let documentUpdates = {};
-    
     for (const doc of DOCUMENT_TYPES) {
       if (selectedDocs[doc.key]) {
-        // 1. If a NEW file is selected, upload it and get the URL
-        const url = await uploadDocument(selectedDocs[doc.key], formData.name, doc.label);
-        documentUpdates[doc.key] = url;
+        documentUpdates[doc.key] = await uploadDocument(selectedDocs[doc.key], formData.name, doc.label);
       } else if (!existingDocs[doc.key]) {
-        // 2. If no new file is selected AND there is no existing file, explicitly nullify it.
-        // This is the trick! If you clicked the "X", it removes it from existingDocs,
-        // so this triggers and wipes the database column, making it instantly disappear in profiles!
         documentUpdates[doc.key] = null;
       }
     }
 
-    const payload = {
-      idNo: formData.idNo,
-      name: formData.name,
-      photo: formData.photo,
-      ...documentUpdates 
-    };
+    let finalPhotoUrl = formData.photo; 
+    if (formData.photoFile) {
+      const uploadedUrl = await uploadDocument(formData.photoFile, formData.name, 'PROFILE_PHOTO');
+      if (uploadedUrl) finalPhotoUrl = uploadedUrl;
+    }
+
+    const payload = { idNo: formData.idNo, name: formData.name, photo: finalPhotoUrl, ...documentUpdates };
 
     try {
       const { error } = editingId 
@@ -101,13 +149,11 @@ export default function Employees({ employees, refreshData, logHistory }) {
         : await supabase.from('employees').insert([payload]);
       
       if (error) throw error;
-
-      if (typeof logHistory === 'function') {
-        logHistory(`${editingId ? 'Updated' : 'Added'} personnel: ${formData.name}`);
-      }
-
+      if (typeof logHistory === 'function') logHistory(`${editingId ? 'Updated' : 'Added'} personnel: ${formData.name}`);
+      
       setIsModalOpen(false); 
-      await refreshData(); // This instantly pulls the new data for the Personnel Hub
+      fetchPaginatedData(); // Refresh the current page
+      if (typeof refreshParentData === 'function') refreshParentData(); 
     } catch (error) {
       alert("Database Error: " + error.message);
     } finally {
@@ -120,23 +166,22 @@ export default function Employees({ employees, refreshData, logHistory }) {
       const { error } = await supabase.from('employees').delete().eq('id', id);
       if (!error) {
         if (typeof logHistory === 'function') logHistory(`Deleted personnel: ${name}`);
-        refreshData();
+        fetchPaginatedData();
       }
     }
   };
 
-  // --- NEW LOGIC: HANDLE REMOVING A DOCUMENT BEFORE SAVING ---
   const handleRemoveDocument = (docKey) => {
-    // Remove from newly selected files
     const newSelected = { ...selectedDocs };
     delete newSelected[docKey];
     setSelectedDocs(newSelected);
     
-    // Remove from existing database records 
     const newExisting = { ...existingDocs };
     delete newExisting[docKey];
     setExistingDocs(newExisting);
   };
+
+  const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
@@ -150,46 +195,83 @@ export default function Employees({ employees, refreshData, logHistory }) {
         </button>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-[3rem] shadow-sm overflow-hidden">
+      <div className="bg-white border border-slate-200 rounded-[3rem] shadow-sm overflow-hidden flex flex-col">
         <div className="p-8 border-b border-slate-50 bg-slate-50/30">
           <div className="relative max-w-md w-full">
             <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-            <input type="text" placeholder="Filter by name..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-14 pr-6 py-4 bg-white border border-slate-200 rounded-2xl text-sm font-bold outline-none focus:ring-4 focus:ring-indigo-500/5 transition-all" />
+            <input type="text" placeholder="Search database..." value={searchTerm} onChange={handleSearchChange} className="w-full pl-14 pr-6 py-4 bg-white border border-slate-200 rounded-2xl text-sm font-bold outline-none focus:ring-4 focus:ring-indigo-500/5 transition-all" />
           </div>
         </div>
 
-        <table className="w-full text-left">
-          <thead className="text-[10px] font-black uppercase text-slate-300 border-b border-slate-50 tracking-widest">
-            <tr>
-              <th className="px-12 py-6">ID Number</th>
-              <th className="px-12 py-6">Full Name</th>
-              <th className="px-12 py-6 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-50">
-            {employees.filter(e => e.name.toLowerCase().includes(searchTerm.toLowerCase())).map((emp) => (
-              <tr key={emp.id} className="hover:bg-slate-50/50 transition-colors group">
-                <td className="px-12 py-6 font-mono font-bold text-indigo-600 bg-indigo-50/10">{emp.idNo}</td>
-                <td className="px-12 py-6">
-                  <div className="flex items-center gap-6">
-                    <div className="w-16 h-16 rounded-[1.5rem] border-2 border-slate-100 overflow-hidden bg-white p-1">
-                      {emp.photo ? <img src={emp.photo} className="w-full h-full object-cover rounded-xl" /> : <User className="text-slate-100 m-auto h-full" size={32} />}
-                    </div>
-                    <p className="font-black text-slate-900 text-xl tracking-tight">{emp.name}</p>
-                  </div>
-                </td>
-                <td className="px-12 py-6 text-right space-x-3">
-                  <button onClick={() => openModal(emp)} className="p-3 text-slate-300 hover:text-indigo-600 hover:bg-white rounded-xl shadow-sm border border-transparent hover:border-slate-100"><Edit2 size={16} /></button>
-                  <button onClick={() => handleDelete(emp.id, emp.name)} className="p-3 text-slate-300 hover:text-rose-600 hover:bg-white rounded-xl shadow-sm border border-transparent hover:border-slate-100"><Trash2 size={16} /></button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="min-h-[400px]"> {/* Keeps table height stable while loading */}
+          {isLoadingList ? (
+            <div className="flex justify-center items-center h-64 text-slate-400">
+              <Loader2 className="animate-spin" size={32} />
+            </div>
+          ) : (
+            <table className="w-full text-left">
+              <thead className="text-[10px] font-black uppercase text-slate-300 border-b border-slate-50 tracking-widest">
+                <tr>
+                  <th className="px-12 py-6">ID Number</th>
+                  <th className="px-12 py-6">Full Name</th>
+                  <th className="px-12 py-6 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {localEmployees.map((emp) => (
+                  <tr key={emp.id} className="hover:bg-slate-50/50 transition-colors group">
+                    <td className="px-12 py-6 font-mono font-bold text-indigo-600 bg-indigo-50/10">{emp.idNo}</td>
+                    <td className="px-12 py-6">
+                      <div className="flex items-center gap-6">
+                        <div className="w-16 h-16 rounded-[1.5rem] border-2 border-slate-100 overflow-hidden bg-white p-1">
+                          {emp.photo ? <img src={emp.photo} className="w-full h-full object-cover rounded-xl" /> : <User className="text-slate-100 m-auto h-full" size={32} />}
+                        </div>
+                        <p className="font-black text-slate-900 text-xl tracking-tight">{emp.name}</p>
+                      </div>
+                    </td>
+                    <td className="px-12 py-6 text-right space-x-3">
+                      <button onClick={() => openModal(emp)} className="p-3 text-slate-300 hover:text-indigo-600 hover:bg-white rounded-xl shadow-sm border border-transparent hover:border-slate-100"><Edit2 size={16} /></button>
+                      <button onClick={() => handleDelete(emp.id, emp.name)} className="p-3 text-slate-300 hover:text-rose-600 hover:bg-white rounded-xl shadow-sm border border-transparent hover:border-slate-100"><Trash2 size={16} /></button>
+                    </td>
+                  </tr>
+                ))}
+                {localEmployees.length === 0 && (
+                  <tr><td colSpan="3" className="text-center py-12 text-slate-400 font-bold">No records found.</td></tr>
+                )}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* --- PAGINATION CONTROLS --- */}
+        <div className="p-6 border-t border-slate-50 bg-slate-50/30 flex items-center justify-between">
+          <p className="text-xs font-bold text-slate-400">
+            Showing {totalCount === 0 ? 0 : page * ITEMS_PER_PAGE + 1} to {Math.min((page + 1) * ITEMS_PER_PAGE, totalCount)} of {totalCount} entries
+          </p>
+          <div className="flex gap-2">
+            <button 
+              onClick={() => setPage(p => Math.max(0, p - 1))} 
+              disabled={page === 0 || isLoadingList}
+              className="p-3 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm">
+              <ChevronLeft size={16} strokeWidth={3} />
+            </button>
+            <div className="px-4 py-3 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600 font-black text-xs min-w-[3rem] text-center shadow-inner">
+              {page + 1} / {totalPages || 1}
+            </div>
+            <button 
+              onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} 
+              disabled={page >= totalPages - 1 || isLoadingList}
+              className="p-3 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm">
+              <ChevronRight size={16} strokeWidth={3} />
+            </button>
+          </div>
+        </div>
       </div>
 
+      {/* --- MODAL REMAINS IDENTICAL --- */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[70] flex items-center justify-center p-4">
+         /* Paste your exact Modal HTML code here (no changes needed inside the modal UI) */
+         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[70] flex items-center justify-center p-4">
           <div className="bg-white rounded-[3.5rem] shadow-2xl w-full max-w-md max-h-[95vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
             
             <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-slate-50/50 shrink-0">
@@ -250,7 +332,7 @@ export default function Employees({ employees, refreshData, logHistory }) {
                             </span>
                           </div>
 
-                          {/* --- NEW: REMOVE (X) BUTTON --- */}
+                          {/* --- REMOVE (X) BUTTON --- */}
                           {hasDoc && (
                             <button
                               type="button"
