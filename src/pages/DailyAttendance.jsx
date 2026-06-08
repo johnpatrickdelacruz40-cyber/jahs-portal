@@ -47,8 +47,21 @@ export default function DailyAttendance({ employees, logHistory }) {
     dayTracker.setDate(dayTracker.getDate() + 1);
   }
 
+  // --- THE FIX: FILTERED FETCH TO PREVENT 1000 ROW CUTOFF ---
   const fetchLogs = async () => {
-    const { data } = await supabase.from('attendance_logs').select('*');
+    const startStr = getDBDateStr(currentCutoff.start);
+    const endStr = getDBDateStr(currentCutoff.end);
+
+    const { data, error } = await supabase.from('attendance_logs')
+      .select('*')
+      .gte('log_date', startStr)
+      .lte('log_date', endStr);
+
+    if (error) {
+      console.error("Fetch logs error:", error);
+      return;
+    }
+
     const mappedStatus = {};
     const mappedDetails = {};
     
@@ -77,6 +90,7 @@ export default function DailyAttendance({ employees, logHistory }) {
     }));
   };
 
+  // --- ADDED EXPLICIT ERROR CATCHING ON SAVE ---
   const handleSave = async (empId, empName) => {
     setIsSaving(true);
     const todayDBStr = getDBDateStr(new Date());
@@ -111,16 +125,29 @@ export default function DailyAttendance({ employees, logHistory }) {
     });
 
     try {
-      if (logsToUpload.length > 0) await supabase.from('attendance_logs').upsert(logsToUpload, { onConflict: 'employee_id, log_date' });
-      if (logsToDelete.length > 0) await supabase.from('attendance_logs').delete().eq('employee_id', empId).in('log_date', logsToDelete);
+      if (logsToUpload.length > 0) {
+        const { error: upsertError } = await supabase.from('attendance_logs').upsert(logsToUpload, { onConflict: 'employee_id, log_date' });
+        if (upsertError) throw upsertError;
+      }
+      
+      if (logsToDelete.length > 0) {
+        const { error: deleteError } = await supabase.from('attendance_logs').delete().eq('employee_id', empId).in('log_date', logsToDelete);
+        if (deleteError) throw deleteError;
+      }
+      
       if (typeof logHistory === 'function') logHistory(`Updated attendance & DTR logs for ${empName}`);
+      
       await fetchLogs(); 
-    } catch (error) { console.error(error); } finally { setIsSaving(false); }
+    } catch (error) { 
+      console.error(error); 
+      alert(`Save failed: ${error.message}`);
+    } finally { 
+      setIsSaving(false); 
+    }
   };
 
   return (
     <div className="h-full">
-      {/* --- ADDED "printMode === 'summary'" so the main UI hides when printing the new report --- */}
       <div className={`space-y-8 animate-in fade-in duration-500 ${printMode === 'matrix' || printMode === 'summary' ? 'hidden' : 'block'}`}>
         
         <div className={`flex-col md:flex-row justify-between items-end gap-6 ${printMode === 'dtr' ? 'hidden' : 'flex'}`}>
@@ -139,7 +166,6 @@ export default function DailyAttendance({ employees, logHistory }) {
               <input type="text" placeholder="Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm font-bold outline-none focus:ring-4 focus:ring-indigo-500/5 transition-all" />
             </div>
             
-            {/* --- NEW BUTTONS --- */}
             <button onClick={() => triggerPrint('matrix')} className="flex items-center justify-center gap-2 px-4 py-3 bg-slate-100 text-slate-600 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all">
               <Printer size={16}/> Matrix
             </button>
@@ -420,7 +446,6 @@ export default function DailyAttendance({ employees, logHistory }) {
                 const todayDBStr = getDBDateStr(new Date());
                 let totalPresent = 0, totalLeave = 0, totalNoWork = 0;
                 
-                // Using the exact cutoff range you selected on the screen
                 cutoffDays.forEach(d => {
                   const dbDate = getDBDateStr(d);
                   const status = attendanceData[`${emp.id}-${dbDate}`];
