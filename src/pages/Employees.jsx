@@ -3,10 +3,7 @@ import { supabase } from '../lib/supabaseClient';
 import { Search, Plus, Edit2, Trash2, X, Camera, User, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import imageCompression from 'browser-image-compression';
 
-// Note: You no longer need to pass the 'employees' array as a prop, 
-// as this component now fetches exactly what it needs directly.
 export default function Employees({ refreshParentData, logHistory }) {
-  // --- PAGINATION & SEARCH STATE ---
   const [localEmployees, setLocalEmployees] = useState([]);
   const [totalCount, setTotalCount] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
@@ -14,13 +11,12 @@ export default function Employees({ refreshParentData, logHistory }) {
   const [isLoadingList, setIsLoadingList] = useState(true);
   const ITEMS_PER_PAGE = 5;
 
-  // --- MODAL & FORM STATE ---
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef(null);
   
-  const [formData, setFormData] = useState({ idNo: '', name: '', photo: null, photoFile: null });
+  const [formData, setFormData] = useState({ idNo: '', name: '', role: '', birthday: '', photo: null, photoFile: null });
   const [selectedDocs, setSelectedDocs] = useState({});
   const [existingDocs, setExistingDocs] = useState({});
   
@@ -34,17 +30,14 @@ export default function Employees({ refreshParentData, logHistory }) {
     { key: 'signature_url', label: 'SIGN' }
   ];
 
-  // --- SERVER-SIDE FETCH & SEARCH ---
   const fetchPaginatedData = async () => {
     setIsLoadingList(true);
     let query = supabase.from('employees').select('*', { count: 'exact' });
 
-    // If typing in search, ask Supabase to filter the whole database
     if (searchTerm) {
       query = query.ilike('name', `%${searchTerm}%`);
     }
 
-    // Calculate our 5-item chunk
     const from = page * ITEMS_PER_PAGE;
     const to = from + ITEMS_PER_PAGE - 1;
 
@@ -60,18 +53,13 @@ export default function Employees({ refreshParentData, logHistory }) {
     setIsLoadingList(false);
   };
 
-  // Run fetch whenever page or search term changes
-  useEffect(() => {
-    fetchPaginatedData();
-  }, [page, searchTerm]);
+  useEffect(() => { fetchPaginatedData(); }, [page, searchTerm]);
 
-  // Reset to page 0 when user types a new search
   const handleSearchChange = (e) => {
     setSearchTerm(e.target.value);
     setPage(0); 
   };
 
-  // --- EXISTING COMPRESS & UPLOAD LOGIC ---
   const handlePhotoUpload = async (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -88,14 +76,21 @@ export default function Employees({ refreshParentData, logHistory }) {
 
   const openModal = (emp = null) => {
     if (emp) { 
-      setFormData({ idNo: emp.idNo || '', name: emp.name, photo: emp.photo, photoFile: null }); 
+      setFormData({ 
+        idNo: emp.idNo || '', 
+        name: emp.name || '', 
+        role: emp.role || '', 
+        birthday: emp.birthday || '', 
+        photo: emp.photo, 
+        photoFile: null 
+      }); 
       setEditingId(emp.id); 
       setExistingDocs({
         jahs_id_url: emp.jahs_id_url, govt_id_url: emp.govt_id_url, wah_url: emp.wah_url, 
         so2_url: emp.so2_url, ncii_url: emp.ncii_url, nbi_url: emp.nbi_url, signature_url: emp.signature_url
       });
     } else { 
-      setFormData({ idNo: '', name: '', photo: null, photoFile: null }); 
+      setFormData({ idNo: '', name: '', role: '', birthday: '', photo: null, photoFile: null }); 
       setEditingId(null); 
       setExistingDocs({});
     }
@@ -141,7 +136,14 @@ export default function Employees({ refreshParentData, logHistory }) {
       if (uploadedUrl) finalPhotoUrl = uploadedUrl;
     }
 
-    const payload = { idNo: formData.idNo, name: formData.name, photo: finalPhotoUrl, ...documentUpdates };
+    const payload = { 
+      idNo: formData.idNo, 
+      name: formData.name, 
+      role: formData.role || null, // Converts empty string to null safely
+      birthday: formData.birthday || null, // Converts empty string to null safely
+      photo: finalPhotoUrl, 
+      ...documentUpdates 
+    };
 
     try {
       const { error } = editingId 
@@ -152,7 +154,7 @@ export default function Employees({ refreshParentData, logHistory }) {
       if (typeof logHistory === 'function') logHistory(`${editingId ? 'Updated' : 'Added'} personnel: ${formData.name}`);
       
       setIsModalOpen(false); 
-      fetchPaginatedData(); // Refresh the current page
+      fetchPaginatedData(); 
       if (typeof refreshParentData === 'function') refreshParentData(); 
     } catch (error) {
       alert("Database Error: " + error.message);
@@ -167,6 +169,7 @@ export default function Employees({ refreshParentData, logHistory }) {
       if (!error) {
         if (typeof logHistory === 'function') logHistory(`Deleted personnel: ${name}`);
         fetchPaginatedData();
+        if (typeof refreshParentData === 'function') refreshParentData(); 
       }
     }
   };
@@ -203,7 +206,7 @@ export default function Employees({ refreshParentData, logHistory }) {
           </div>
         </div>
 
-        <div className="min-h-[400px]"> {/* Keeps table height stable while loading */}
+        <div className="min-h-[400px] relative">
           {isLoadingList ? (
             <div className="flex justify-center items-center h-64 text-slate-400">
               <Loader2 className="animate-spin" size={32} />
@@ -226,7 +229,10 @@ export default function Employees({ refreshParentData, logHistory }) {
                         <div className="w-16 h-16 rounded-[1.5rem] border-2 border-slate-100 overflow-hidden bg-white p-1">
                           {emp.photo ? <img src={emp.photo} className="w-full h-full object-cover rounded-xl" /> : <User className="text-slate-100 m-auto h-full" size={32} />}
                         </div>
-                        <p className="font-black text-slate-900 text-xl tracking-tight">{emp.name}</p>
+                        <div>
+                          <p className="font-black text-slate-900 text-xl tracking-tight">{emp.name}</p>
+                          {emp.role && <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">{emp.role}</p>}
+                        </div>
                       </div>
                     </td>
                     <td className="px-12 py-6 text-right space-x-3">
@@ -243,7 +249,6 @@ export default function Employees({ refreshParentData, logHistory }) {
           )}
         </div>
 
-        {/* --- PAGINATION CONTROLS --- */}
         <div className="p-6 border-t border-slate-50 bg-slate-50/30 flex items-center justify-between">
           <p className="text-xs font-bold text-slate-400">
             Showing {totalCount === 0 ? 0 : page * ITEMS_PER_PAGE + 1} to {Math.min((page + 1) * ITEMS_PER_PAGE, totalCount)} of {totalCount} entries
@@ -255,7 +260,7 @@ export default function Employees({ refreshParentData, logHistory }) {
               className="p-3 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm">
               <ChevronLeft size={16} strokeWidth={3} />
             </button>
-            <div className="px-4 py-3 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600 font-black text-xs min-w-[3rem] text-center shadow-inner">
+            <div className="px-4 py-3 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600 font-black text-xs min-w-[3rem] text-center shadow-inner flex items-center justify-center">
               {page + 1} / {totalPages || 1}
             </div>
             <button 
@@ -268,10 +273,8 @@ export default function Employees({ refreshParentData, logHistory }) {
         </div>
       </div>
 
-      {/* --- MODAL REMAINS IDENTICAL --- */}
       {isModalOpen && (
-         /* Paste your exact Modal HTML code here (no changes needed inside the modal UI) */
-         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[70] flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[70] flex items-center justify-center p-4">
           <div className="bg-white rounded-[3.5rem] shadow-2xl w-full max-w-md max-h-[95vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
             
             <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-slate-50/50 shrink-0">
@@ -298,9 +301,19 @@ export default function Employees({ refreshParentData, logHistory }) {
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Personnel Full Name</label>
                     <input required disabled={isSubmitting} type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-[1.5rem] outline-none font-bold text-slate-800 text-sm shadow-inner" placeholder="Last Name, First Name" />
                   </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Role / Position</label>
+                    {/* REMOVED 'required' from here */}
+                    <input disabled={isSubmitting} type="text" value={formData.role} onChange={e => setFormData({...formData, role: e.target.value})} className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-[1.5rem] outline-none font-bold text-slate-800 text-sm shadow-inner" placeholder="e.g. Field Engineer" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Birthday</label>
+                    {/* REMOVED 'required' from here */}
+                    <input disabled={isSubmitting} type="date" value={formData.birthday} onChange={e => setFormData({...formData, birthday: e.target.value})} className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-[1.5rem] outline-none font-bold text-slate-800 text-sm shadow-inner text-slate-500" />
+                  </div>
                 </div>
 
-                {/* --- DOCUMENT UPLOAD GRID --- */}
                 <div className="space-y-3 pt-4 border-t border-slate-100">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Upload Documents (PDF / Image)</label>
                   <div className="grid grid-cols-3 gap-3">
@@ -311,8 +324,6 @@ export default function Employees({ refreshParentData, logHistory }) {
                       
                       return (
                         <div key={doc.key} className="relative group">
-                          
-                          {/* File Input (Only active if no document exists) */}
                           {!hasDoc && (
                             <input 
                               type="file" 
@@ -323,7 +334,6 @@ export default function Employees({ refreshParentData, logHistory }) {
                               title={`Upload ${doc.label}`}
                             />
                           )}
-
                           <div className={`flex flex-col items-center justify-center p-3 rounded-2xl border-2 transition-all 
                             ${hasNew ? 'border-emerald-400 bg-emerald-50 text-emerald-600' : (hasExisting ? 'border-indigo-400 bg-indigo-50 text-indigo-600' : 'border-dashed border-slate-200 bg-slate-50 text-slate-400 hover:border-indigo-300')}`}>
                             <span className="font-black text-[10px] tracking-widest uppercase leading-none">{doc.label}</span>
@@ -331,8 +341,6 @@ export default function Employees({ refreshParentData, logHistory }) {
                               {hasNew ? 'Selected' : (hasExisting ? 'Saved ✅' : 'Upload')}
                             </span>
                           </div>
-
-                          {/* --- REMOVE (X) BUTTON --- */}
                           {hasDoc && (
                             <button
                               type="button"
@@ -344,7 +352,6 @@ export default function Employees({ refreshParentData, logHistory }) {
                               <X size={12} strokeWidth={4} />
                             </button>
                           )}
-                          
                         </div>
                       );
                     })}

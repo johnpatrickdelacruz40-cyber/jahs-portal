@@ -3,8 +3,8 @@ import { supabase } from '../lib/supabaseClient';
 import { 
   Users, CheckCircle2, XCircle, Clock, 
   Activity, Video, PieChart, X, User, Printer, Coffee, BarChart3,
-  Search, MapPin, Navigation, ExternalLink,
-  MessageSquare, Send, Bot, ChevronRight, ArrowLeft, ShieldAlert
+  MessageSquare, Send, Bot, ChevronRight, ArrowLeft, ShieldAlert,
+  Megaphone, Gift
 } from 'lucide-react';
 
 const getDBDateStr = (dateObj) => {
@@ -21,18 +21,14 @@ export default function Dashboard({ employees }) {
   const [activeList, setActiveList] = useState(null); 
   const [isLoading, setIsLoading] = useState(true);
 
-  // --- DEPLOYMENT ROUTER STATE ---
-  const COMPANY_LOCATION = "Brgy Balubad, Bulakan, Bulacan, Philippines";
-  const [searchSite, setSearchSite] = useState('');
-  const [suggestions, setSuggestions] = useState([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [selectedDestination, setSelectedDestination] = useState(null);
-  const [isSearching, setIsSearching] = useState(false);
+  // --- NEW: CULTURE HUB STATE ---
+  const [announcements, setAnnouncements] = useState([]);
+  const [birthdayCelebrants, setBirthdayCelebrants] = useState([]);
 
   // --- RULE-BASED CHATBOT STATE ---
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatInput, setChatInput] = useState('');
-  const [currentCategory, setCurrentCategory] = useState(null); // Controls Sub-Menus
+  const [currentCategory, setCurrentCategory] = useState(null); 
   const [messages, setMessages] = useState([
     { id: 1, text: "Hello! I'm the JAHS Telecom Assistant. Select a category below or type your question.", sender: 'bot' }
   ]);
@@ -77,46 +73,30 @@ export default function Dashboard({ employees }) {
     else setIsLoading(false);
   }, [employees]);
 
-  // 3. AUTOCOMPLETE SEARCH FOR DEPLOYMENT SITES
+  // --- 3. FETCH CULTURE HUB DATA ---
   useEffect(() => {
-    if (searchSite.trim().length < 2) {
-      setSuggestions([]);
-      return;
-    }
-    
-    setIsSearching(true);
-    const delayDebounceFn = setTimeout(async () => {
-      try {
-        const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${searchSite}&count=20&language=en&format=json`);
-        const data = await res.json();
-        
-        if (data.results) {
-          let localResults = data.results.filter(loc => loc.country_code === 'PH');
-          localResults = localResults.filter((v, i, a) => a.findIndex(t => (t.name === v.name && t.admin1 === v.admin1)) === i);
-          setSuggestions(localResults.slice(0, 5));
-        } else {
-          setSuggestions([]);
-        }
-      } catch (err) { console.error(err); }
-      setIsSearching(false);
-    }, 300);
+    const fetchAnnouncements = async () => {
+      const { data } = await supabase.from('announcements').select('*').order('created_at', { ascending: false }).limit(3);
+      if (data) setAnnouncements(data);
+    };
+    fetchAnnouncements();
+  }, []);
 
-    return () => clearTimeout(delayDebounceFn);
-  }, [searchSite]);
-
-  const handleSelectSite = (site) => {
-    const province = site.admin2 ? site.admin2.replace('Province of ', '').replace(' (capital)', '') : '';
-    const fullLocation = `${site.name}${province && province !== site.name ? `, ${province}` : ''}, Philippines`;
+  useEffect(() => {
+    // Process birthdays from the existing employees array (saves database reads)
+    const currentMonth = new Date().getMonth() + 1;
+    const upcoming = employees.filter(emp => {
+      if (!emp.birthday) return false;
+      const [yyyy, mm, dd] = emp.birthday.split('-');
+      return parseInt(mm, 10) === currentMonth;
+    }).sort((a, b) => parseInt(a.birthday.split('-')[2], 10) - parseInt(b.birthday.split('-')[2], 10));
     
-    setSearchSite(fullLocation);
-    setSelectedDestination(fullLocation);
-    setShowSuggestions(false);
-  };
+    setBirthdayCelebrants(upcoming);
+  }, [employees]);
 
   const total = employees.length;
 
   // --- 4. HIERARCHICAL KNOWLEDGE BASE ---
-  // We use categories to organize the sub-questions
   const FAQ_CATEGORIES = [
     {
       id: 'attendance',
@@ -158,10 +138,9 @@ export default function Dashboard({ employees }) {
   // Auto-scroll chat
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
-  // Handle User Input (Typing OR Clicking a chip)
+  // Handle User Input
   const handleSendMessage = (textOrEvent, directAnswer = null) => {
     let userText = "";
-    
     if (typeof textOrEvent === 'string') {
       userText = textOrEvent;
     } else {
@@ -171,11 +150,9 @@ export default function Dashboard({ employees }) {
 
     if (!userText.trim()) return;
 
-    // 1. Post user message
     setMessages(prev => [...prev, { id: Date.now(), text: userText, sender: 'user' }]);
     setChatInput('');
 
-    // 2. Security Guardrail Check (Block admin/password info)
     const lowerText = userText.toLowerCase();
     if (lowerText.includes("admin") || lowerText.includes("password") || lowerText.includes("database") || lowerText.includes("hack")) {
       setTimeout(() => {
@@ -188,15 +165,11 @@ export default function Dashboard({ employees }) {
       return;
     }
 
-    // 3. Process Bot Reply
     setTimeout(() => {
       let botReply = "";
-
       if (directAnswer) {
-        // User clicked a specific sub-question button
         botReply = directAnswer;
       } else {
-        // User typed a custom question. Search through ALL categories and questions.
         let foundAnswer = null;
         for (const category of FAQ_CATEGORIES) {
           for (const faq of category.questions) {
@@ -207,10 +180,8 @@ export default function Dashboard({ employees }) {
           }
           if (foundAnswer) break;
         }
-
         botReply = foundAnswer || "I'm sorry, I only have access to specific telecom and operations data. Please browse the categories below or check your spelling.";
       }
-
       setMessages(prev => [...prev, { id: Date.now() + 1, text: botReply, sender: 'bot' }]);
     }, 400); 
   };
@@ -223,13 +194,9 @@ export default function Dashboard({ employees }) {
   const stop1 = pctPresent;
   const stop2 = pctPresent + pctLeave;
 
-  // Determine what day today is (0 = Sunday, 1 = Monday ... 5 = Friday, 6 = Saturday)
   const currentDayNum = currentTime.getDay(); 
-
-  // Mock historical data so the graph looks realistic for your OJT presentation
   const mockHistorical = { 1: 95, 2: 88, 3: 92, 4: 90, 5: 85, 6: 75 };
 
-  // Dynamically build the chart based on today's actual day
   const weeklyData = [
     { day: 'Mon', id: 1 },
     { day: 'Tue', id: 2 },
@@ -239,16 +206,9 @@ export default function Dashboard({ employees }) {
     { day: 'Sat', id: 6 },
   ].map(item => {
     let percent = 0;
-    if (item.id < currentDayNum) {
-      // If it is a PAST day, show historical data
-      percent = mockHistorical[item.id];
-    } else if (item.id === currentDayNum) {
-      // If it is TODAY, show the live calculated data
-      percent = pctPresent > 0 ? Math.round(pctPresent) : 0;
-    } else {
-      // If it is a FUTURE day, leave it empty (0)
-      percent = 0;
-    }
+    if (item.id < currentDayNum) percent = mockHistorical[item.id];
+    else if (item.id === currentDayNum) percent = pctPresent > 0 ? Math.round(pctPresent) : 0;
+    else percent = 0;
     return { day: item.day, percent };
   });
 
@@ -348,83 +308,73 @@ export default function Dashboard({ employees }) {
               <div className="relative w-full h-40 rounded-[1.5rem] overflow-hidden bg-slate-900 border border-slate-800"><video autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover opacity-80"><source src="/bg-video.mp4" type="video/mp4" /></video></div>
             </div>
 
-            {/* --- SITE DEPLOYMENT ROUTER --- */}
-            <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-8 flex-1 flex flex-col relative z-20">
-              
-              <div className="flex justify-between items-start mb-6">
-  <div>
-    <h3 className="text-lg font-black tracking-tight text-slate-900 uppercase flex items-center gap-2">
-      <Navigation size={18} className="text-indigo-500" /> Deployment Router
-    </h3>
-    <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest flex items-center gap-1">From <MapPin size={10}/> Bulakan HQ</p>
-  </div>
-</div>
-
-              {/* Destination Search Bar */}
-              <div className="relative mb-6">
-                <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input 
-                  type="text" 
-                  value={searchSite} 
-                  onChange={(e) => { setSearchSite(e.target.value); setShowSuggestions(true); setSelectedDestination(null); }} 
-                  onFocus={() => { if(searchSite.length >= 2) setShowSuggestions(true); }}
-                  placeholder="Enter Deployment Destination..." 
-                  className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/20"
-                />
-                
-                {showSuggestions && suggestions.length > 0 && (
-                  <div className="absolute top-full left-0 w-full mt-2 bg-white border border-slate-100 rounded-2xl shadow-2xl overflow-hidden z-50">
-                    {suggestions.map((s, i) => {
-                      const province = s.admin2 ? s.admin2.replace('Province of ', '').replace(' (capital)', '') : '';
-                      const region = s.admin1 ? s.admin1 : '';
-                      return (
-                        <div 
-                          key={i}
-                          onClick={() => handleSelectSite(s)}
-                          className="px-5 py-3 hover:bg-slate-50 cursor-pointer flex flex-col border-b border-slate-50 last:border-0 transition-colors"
-                        >
-                          <span className="font-bold text-slate-900 text-sm leading-none">
-                            {s.name}{province && province !== s.name ? `, ${province}` : ''}
-                          </span>
-                          <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1">
-                            {region ? `${region}, ` : ''}{s.country}
-                          </span>
-                        </div>
-                      )
-                    })}
-                  </div>
+            {/* --- NEW: CULTURE HUB (Announcements) --- */}
+            <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-6 lg:p-8 flex flex-col relative z-20">
+              <h3 className="text-lg font-black tracking-tight text-slate-900 uppercase flex items-center gap-2 mb-4">
+                <Megaphone size={18} className="text-indigo-500" /> Announcements
+              </h3>
+              <div className="space-y-3 flex-1 overflow-y-auto max-h-64 pr-2">
+                {announcements.length === 0 ? (
+                   <p className="text-[10px] font-bold text-slate-400 bg-slate-50 p-4 rounded-2xl text-center border border-dashed border-slate-200">No recent announcements.</p>
+                ) : (
+                  announcements.map((ann) => (
+                    <div key={ann.id} className="p-4 bg-slate-50 border border-slate-100 rounded-2xl hover:bg-white hover:shadow-sm transition-all">
+                      <div className="flex justify-between items-start mb-1">
+                        <h4 className="text-sm font-black text-slate-900 tracking-tight leading-tight pr-2">{ann.subject}</h4>
+                        <span className="text-[8px] font-black text-indigo-500 bg-indigo-50 px-2 py-1 rounded-md uppercase tracking-widest shrink-0">{new Date(ann.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                      </div>
+                      <p className="text-xs font-semibold text-slate-500 line-clamp-3 leading-relaxed mt-1">{ann.message}</p>
+                    </div>
+                  ))
                 )}
               </div>
-
-              {selectedDestination ? (
-                <div className="flex flex-col flex-1">
-                  <div className="w-full h-48 bg-slate-100 rounded-2xl border border-slate-200 overflow-hidden relative mb-4">
-                    <iframe 
-                      width="100%" 
-                      height="100%" 
-                      frameBorder="0" 
-                      style={{ border: 0 }}
-                      src={`https://maps.google.com/maps?saddr=${encodeURIComponent(COMPANY_LOCATION)}&daddr=${encodeURIComponent(selectedDestination)}&output=embed`}
-                      allowFullScreen
-                    ></iframe>
-                  </div>
-                  <a 
-                    href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(COMPANY_LOCATION)}&destination=${encodeURIComponent(selectedDestination)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-auto w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors shadow-lg shadow-indigo-200"
-                  >
-                    Launch Live Navigation <ExternalLink size={14}/>
-                  </a>
-                </div>
-              ) : (
-                <div className="flex-1 flex flex-col items-center justify-center text-slate-400 opacity-60">
-                  <Navigation size={32} className="mb-2 opacity-50" />
-                  <p className="text-[10px] font-black uppercase tracking-widest text-center">Awaiting Destination<br/>Type a city to calculate route</p>
-                </div>
-              )}
-
             </div>
+
+            {/* --- NEW: CULTURE HUB (Birthdays) --- */}
+            <div className="bg-gradient-to-b from-white to-slate-50 rounded-[2.5rem] border border-slate-100 shadow-sm p-6 lg:p-8 flex flex-col relative z-20">
+              <div className="flex justify-between items-end mb-4">
+                <h3 className="text-lg font-black tracking-tight text-slate-900 uppercase flex items-center gap-2">
+                  <Gift size={18} className="text-rose-500" /> Birthdays
+                </h3>
+                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{new Date().toLocaleString('default', { month: 'long' })}</p>
+              </div>
+              
+              <div className="space-y-3">
+                {birthdayCelebrants.length === 0 ? (
+                   <p className="text-[10px] font-bold text-slate-400 text-center mt-4 mb-2">No birthdays this month.</p>
+                ) : (
+                  birthdayCelebrants.map(emp => {
+                    const day = parseInt(emp.birthday.split('-')[2], 10);
+                    const isToday = day === new Date().getDate();
+                    
+                    return (
+                      <div key={emp.id} className={`flex items-center gap-3 p-3 rounded-2xl border transition-all ${isToday ? 'bg-gradient-to-r from-rose-500 to-pink-500 text-white shadow-lg scale-105 transform -translate-y-1 animate-in fade-in zoom-in duration-500' : 'bg-white border-slate-100 hover:shadow-sm'}`}>
+                        <div className={`w-10 h-10 rounded-xl bg-white overflow-hidden shrink-0 border-2 ${isToday ? 'border-white ring-2 ring-rose-400/50 animate-pulse p-0.5' : 'border-slate-100 p-0.5'}`}>
+                          {emp.photo ? <img src={emp.photo} className="w-full h-full object-cover rounded-lg" /> : <User className={`m-auto h-full ${isToday ? 'text-slate-300' : 'text-slate-200'}`} size={16} />}
+                        </div>
+                        
+                        <div className="flex-1 overflow-hidden">
+                          <p className={`font-black text-xs leading-tight truncate ${isToday ? 'text-white drop-shadow-md' : 'text-slate-800'}`}>{emp.name}</p>
+                          <p className={`text-[8px] font-black uppercase tracking-widest mt-0.5 truncate ${isToday ? 'text-rose-100' : 'text-slate-400'}`}>{emp.role || 'Personnel'}</p>
+                        </div>
+
+                        <div className={`flex flex-col items-center justify-center w-10 h-10 rounded-lg shrink-0 ${isToday ? 'bg-white text-rose-600 shadow-inner' : 'bg-slate-100 text-slate-500'}`}>
+                          {isToday ? (
+                            <span className="text-xl animate-bounce">🎉</span>
+                          ) : (
+                            <>
+                              <span className="text-[7px] font-black uppercase tracking-widest leading-none mt-0.5 opacity-60">{new Date(emp.birthday).toLocaleString('default', { month: 'short' })}</span>
+                              <span className="text-sm font-black leading-none mt-0.5">{day}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
           </div>
         </div>
 
@@ -437,7 +387,6 @@ export default function Dashboard({ employees }) {
       {/* --- MODAL --- */}
       {activeList && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200 print:bg-white print:p-0 print:block">
-          {/* Modal content omitted for brevity, remains exactly identical to previous block */}
           <div className="bg-white rounded-[2rem] w-full max-w-md shadow-2xl border border-slate-100 flex flex-col max-h-[80vh] animate-in zoom-in-95 duration-200 print:shadow-none print:border-none print:max-w-none print:h-auto print:max-h-none">
             <div className="p-6 border-b border-slate-100 flex justify-between items-center print:border-black print:pb-4">
                <div>
@@ -487,11 +436,10 @@ export default function Dashboard({ employees }) {
           </div>
         )}
 
-        {/* Chat Window - WIDENED TO w-96 (384px) and h-[32rem] */}
+        {/* Chat Window */}
         {isChatOpen && (
           <div className="w-96 h-[32rem] bg-white border border-slate-200 rounded-3xl shadow-2xl mb-4 flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 duration-300 relative z-10">
             
-            {/* Chat Header */}
             <div className="bg-[#5538ff] p-4 flex justify-between items-center text-white shrink-0">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-white p-1.5 flex items-center justify-center overflow-hidden border-2 border-white relative">
@@ -505,7 +453,6 @@ export default function Dashboard({ employees }) {
               <button onClick={() => setIsChatOpen(false)} className="text-indigo-200 hover:text-white transition-colors"><X size={20}/></button>
             </div>
 
-            {/* Chat Messages Area */}
             <div className="flex-1 p-4 overflow-y-auto flex flex-col gap-4 bg-slate-50 relative z-0">
               {messages.map(msg => (
                 <div key={msg.id} className={`flex gap-2 relative z-0 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -525,7 +472,6 @@ export default function Dashboard({ employees }) {
             {/* HIERARCHICAL MENU SYSTEM */}
             <div className="bg-white border-t border-slate-100 flex flex-col shrink-0 max-h-48">
               
-              {/* Back Button (Only shows if inside a category) */}
               {currentCategory && (
                 <div className="px-3 py-2 border-b border-slate-50 flex items-center">
                    <button 
@@ -537,10 +483,8 @@ export default function Dashboard({ employees }) {
                 </div>
               )}
 
-              {/* Menu List */}
               <div className="p-3 overflow-y-auto flex flex-col gap-2">
                 {!currentCategory ? (
-                  // MAIN MENU: Show Categories
                   <>
                     <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 pl-1 mb-1">Topics</p>
                     {FAQ_CATEGORIES.map((category) => (
@@ -555,7 +499,6 @@ export default function Dashboard({ employees }) {
                     ))}
                   </>
                 ) : (
-                  // SUB MENU: Show Questions inside selected Category
                   FAQ_CATEGORIES.find(c => c.id === currentCategory)?.questions.map((faq, index) => (
                     <button 
                       key={index}
@@ -569,7 +512,6 @@ export default function Dashboard({ employees }) {
               </div>
             </div>
 
-            {/* Input Form */}
             <form onSubmit={handleSendMessage} className="p-3 bg-white border-t border-slate-100 flex gap-2 shrink-0 relative z-10">
               <input 
                 type="text" 

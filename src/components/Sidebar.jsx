@@ -1,17 +1,19 @@
 import React from 'react';
-import { RadioTower, Signal, Globe, ShoppingCart, MapPin } from 'lucide-react'
 import { 
   LayoutDashboard, Users, UserSquare, CalendarCheck, 
-  ShieldAlert, FileClock, LogOut, X 
+  ShieldAlert, FileClock, LogOut, X, 
+  RadioTower, Signal, Globe, ShoppingCart, MapPin, Megaphone // Added Megaphone
 } from 'lucide-react';
 
 export default function Sidebar({ isOpen, setIsOpen, activeTab, setActiveTab, isAdmin, setIsAdmin }) {
   
+  // --- NEW: Added 'Announcements' to the menu array ---
   const menuItems = [
     { name: 'Dashboard', icon: LayoutDashboard },
     { name: 'Employee Profiles', icon: UserSquare },
     { name: 'Manage Employees', icon: Users, adminOnly: true },
     { name: 'Daily Attendance', icon: CalendarCheck, adminOnly: true },
+    { name: 'Announcements', icon: Megaphone, adminOnly: true }, // Placed in Admin section
     { name: 'Audit History', icon: FileClock, adminOnly: true },
   ];
 

@@ -9,6 +9,7 @@ import Employees from './pages/Employees';
 import AdminLogin from './pages/AdminLogin';
 import DailyAttendance from './pages/DailyAttendance';
 import EmployeeProfiles from './pages/EmployeeProfiles';
+import Announcements from './pages/Announcements';
 
 export default function App() {
   const [isAdmin, setIsAdmin] = useState(false);
@@ -39,8 +40,8 @@ export default function App() {
   };
 
   const renderContent = () => {
-    // Admin Guard logic: Requires login for specific sensitive tabs
-    if (currentView === 'Manage Employees' || currentView === 'Daily Attendance' || currentView === 'Audit History') {
+    // Admin Guard logic: Requires login for specific sensitive tabs (Added Announcements)
+    if (currentView === 'Manage Employees' || currentView === 'Daily Attendance' || currentView === 'Audit History' || currentView === 'Announcements') {
       if (!isAdmin) return <AdminLogin onLogin={() => { setIsAdmin(true); logAction('Admin Session Started'); }} />;
     }
 
@@ -56,6 +57,10 @@ export default function App() {
 
       case 'Daily Attendance':
         return <DailyAttendance employees={employees} logHistory={logAction} />;
+
+      // --- NEW: Added Announcements Render Logic ---
+      case 'Announcements':
+        return <Announcements logHistory={logAction} />;
 
       case 'Admin Portal':
         return !isAdmin ? <AdminLogin onLogin={() => setIsAdmin(true)} /> : <Dashboard employees={employees} />;

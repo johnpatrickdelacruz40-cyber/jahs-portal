@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { Search, ChevronLeft, ChevronRight, User, ChevronDown, ChevronUp, Printer, FileText, X, ExternalLink, Loader2 } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, User, ChevronDown, ChevronUp, Printer, FileText, X, ExternalLink, Loader2, Gift } from 'lucide-react';
 
 const getDBDateStr = (dateObj) => {
   const year = dateObj.getFullYear();
@@ -10,7 +10,6 @@ const getDBDateStr = (dateObj) => {
 };
 
 export default function EmployeeProfiles() {
-  // --- PAGINATION & SEARCH STATE ---
   const [localEmployees, setLocalEmployees] = useState([]);
   const [totalCount, setTotalCount] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
@@ -18,13 +17,10 @@ export default function EmployeeProfiles() {
   const [isLoadingList, setIsLoadingList] = useState(true);
   const ITEMS_PER_PAGE = 5;
 
-  // --- DTR & LOG STATE ---
   const [viewDate, setViewDate] = useState(new Date());
   const [attendanceLogs, setAttendanceLogs] = useState({});
   const [dtrDetails, setDtrDetails] = useState({}); 
   const [expandedId, setExpandedId] = useState(null);
-
-  // --- DOCUMENT VIEWER STATE & CONFIG ---
   const [viewingDoc, setViewingDoc] = useState(null);
   
   const DOCUMENT_TYPES = [
@@ -55,7 +51,6 @@ export default function EmployeeProfiles() {
     d.setDate(d.getDate() + 1); 
   }
 
-  // --- SERVER-SIDE FETCH: EMPLOYEES ---
   const fetchPaginatedEmployees = async () => {
     setIsLoadingList(true);
     let query = supabase.from('employees').select('*', { count: 'exact' });
@@ -79,12 +74,10 @@ export default function EmployeeProfiles() {
     setIsLoadingList(false);
   };
 
-  // --- SERVER-SIDE FETCH: ATTENDANCE LOGS (OPTIMIZED) ---
   const fetchLogs = async () => {
     const startStr = getDBDateStr(currentCutoff.start);
     const endStr = getDBDateStr(currentCutoff.end);
 
-    // FIX: Only download logs for the exact 15-day window we are viewing to save massive bandwidth
     const { data, error } = await supabase.from('attendance_logs')
       .select('*')
       .gte('log_date', startStr)
@@ -111,14 +104,21 @@ export default function EmployeeProfiles() {
     setDtrDetails(mappedDetails);
   };
 
-  // Trigger re-fetches when states change
   useEffect(() => { fetchPaginatedEmployees(); }, [page, searchTerm]);
   useEffect(() => { fetchLogs(); }, [viewDate]);
 
   const handleSearchChange = (e) => {
     setSearchTerm(e.target.value);
     setPage(0); 
-    setExpandedId(null); // Close expanded profiles when searching
+    setExpandedId(null);
+  };
+
+  const getFormattedBirthday = (dateStr) => {
+    if (!dateStr) return null;
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return null;
+    const monthNames = ["", "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+    return { month: monthNames[parseInt(parts[1], 10)], day: parseInt(parts[2], 10) };
   };
 
   const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
@@ -163,21 +163,43 @@ export default function EmployeeProfiles() {
                     if (status === 'present') present++; else if (status === 'leave') leave++; else if (status === 'absent' || !status) noWork++;
                   });
 
+                  const bday = getFormattedBirthday(emp.birthday);
+
                   return (
                     <div key={emp.id} className={`bg-white border border-slate-200 rounded-[2.5rem] shadow-sm overflow-hidden transition-all duration-300 ${isExpanded ? 'ring-4 ring-indigo-500/10' : 'hover:shadow-md'}`}>
                        
                        <div onClick={() => setExpandedId(isExpanded ? null : emp.id)} className="p-8 flex items-center justify-between cursor-pointer hover:bg-slate-50/50 transition-colors">
-                          <div className="flex flex-col md:flex-row md:items-center gap-6">
+                          <div className="flex flex-col md:flex-row md:items-center gap-6 w-full">
                              <div className="w-20 h-20 rounded-[1.5rem] border-4 border-slate-50 shadow-sm overflow-hidden bg-white p-1 shrink-0">
                                 {emp.photo ? <img src={emp.photo} className="w-full h-full object-cover rounded-xl" /> : <User className="text-slate-200 m-auto h-full" size={32} />}
                              </div>
-                             <div>
+                             
+                             <div className="flex-1">
                                 <h4 className="text-2xl font-black text-slate-900 leading-tight tracking-tight">{emp.name}</h4>
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">{emp.idNo}</p>
+                                <div className="flex flex-col items-start gap-1.5 mt-1">
+                                   
+                                   {/* ROW 1: ID Number */}
+                                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{emp.idNo}</p>
+                                   
+                                   {/* ROW 2: Birthday */}
+                                   {bday && (
+                                     <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                                       <Gift size={12} className="text-emerald-500" />
+                                       <span>{bday.month} {bday.day}</span>
+                                     </div>
+                                   )}
+
+                                   {/* ROW 3: Role Badge */}
+                                   {emp.role && (
+                                     <div className="px-2.5 py-1 bg-slate-100 border border-slate-200 rounded-md text-[9px] font-black text-slate-500 uppercase tracking-widest leading-none mt-1">
+                                       {emp.role}
+                                     </div>
+                                   )}
+                                </div>
                              </div>
                              
-                             {/* --- DOCUMENT BUTTONS --- */}
-                             <div className="flex flex-wrap items-center gap-2 md:ml-4" onClick={(e) => e.stopPropagation()}>
+                             <div className="flex flex-wrap items-center gap-2 md:ml-4 justify-end" onClick={(e) => e.stopPropagation()}>
+                                {/* DOCUMENT BUTTONS ONLY */}
                                 {DOCUMENT_TYPES.map((doc) => {
                                   const fileUrl = emp[doc.key];
                                   const hasDoc = !!fileUrl;
@@ -199,7 +221,7 @@ export default function EmployeeProfiles() {
                              </div>
 
                           </div>
-                          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all shrink-0 ${isExpanded ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-50 text-slate-400 border border-slate-100'}`}>
+                          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all shrink-0 ml-6 ${isExpanded ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-50 text-slate-400 border border-slate-100'}`}>
                              {isExpanded ? <ChevronUp size={24} /> : <ChevronDown size={24} />}
                           </div>
                        </div>
@@ -302,7 +324,6 @@ export default function EmployeeProfiles() {
             )}
          </div>
 
-         {/* --- PAGINATION CONTROLS --- */}
          <div className="mt-6 p-6 bg-white border border-slate-200 rounded-[2rem] shadow-sm flex items-center justify-between">
            <p className="text-xs font-bold text-slate-400">
              Showing {totalCount === 0 ? 0 : page * ITEMS_PER_PAGE + 1} to {Math.min((page + 1) * ITEMS_PER_PAGE, totalCount)} of {totalCount} profiles
@@ -327,7 +348,6 @@ export default function EmployeeProfiles() {
          </div>
       </div>
 
-      {/* --- PRINT ONLY VIEW FOR PUBLIC PROFILE --- */}
       <div className="hidden print:block text-black bg-white p-4 font-sans max-w-3xl mx-auto">
         {localEmployees.filter(e => e.id === expandedId).map(emp => {
             return (
@@ -405,7 +425,6 @@ export default function EmployeeProfiles() {
         })}
       </div>
 
-      {/* --- DOCUMENT VIEWER POPUP MODAL --- */}
       {viewingDoc && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="bg-white rounded-3xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95">
