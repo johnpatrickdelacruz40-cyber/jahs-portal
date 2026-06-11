@@ -304,13 +304,11 @@ export default function Employees({ refreshParentData, logHistory }) {
 
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Role / Position</label>
-                    {/* REMOVED 'required' from here */}
-                    <input disabled={isSubmitting} type="text" value={formData.role} onChange={e => setFormData({...formData, role: e.target.value})} className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-[1.5rem] outline-none font-bold text-slate-800 text-sm shadow-inner" placeholder="e.g. Field Engineer" />
+                    <input disabled={isSubmitting} type="text" value={formData.role || ''} onChange={e => setFormData({...formData, role: e.target.value})} className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-[1.5rem] outline-none font-bold text-slate-800 text-sm shadow-inner" placeholder="e.g. Field Engineer" />
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Birthday</label>
-                    {/* REMOVED 'required' from here */}
-                    <input disabled={isSubmitting} type="date" value={formData.birthday} onChange={e => setFormData({...formData, birthday: e.target.value})} className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-[1.5rem] outline-none font-bold text-slate-800 text-sm shadow-inner text-slate-500" />
+                    <input disabled={isSubmitting} type="date" value={formData.birthday || ''} onChange={e => setFormData({...formData, birthday: e.target.value})} className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-[1.5rem] outline-none font-bold text-slate-800 text-sm shadow-inner text-slate-500" />
                   </div>
                 </div>
 
