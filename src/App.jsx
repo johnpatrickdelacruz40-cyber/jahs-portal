@@ -91,7 +91,7 @@ export default function App() {
   };
 
   return (
-    // 'print:' prefixes allow the page to flow naturally onto paper when Ctrl+P is pressed
+    // 'print:' prefixes allow the page to flow naturally onto paper when Ctrl+P is pressed.....
     <div className="flex h-screen print:h-auto print:bg-white bg-[#F8FAFC] font-sans text-slate-900 overflow-hidden print:overflow-visible select-none print:select-auto">
       
       {/* Hide Sidebar when printing, ensure 'h-full' so it stretches to the bottom */}
