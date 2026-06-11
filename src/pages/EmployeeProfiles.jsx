@@ -177,19 +177,9 @@ export default function EmployeeProfiles() {
                              <div className="flex-1">
                                 <h4 className="text-2xl font-black text-slate-900 leading-tight tracking-tight">{emp.name}</h4>
                                 <div className="flex flex-col items-start gap-1.5 mt-1">
-                                   
-                                   {/* ROW 1: ID Number */}
                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{emp.idNo}</p>
                                    
-                                   {/* ROW 2: Birthday */}
-                                   {bday && (
-                                     <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                                       <Gift size={12} className="text-emerald-500" />
-                                       <span>{bday.month} {bday.day}</span>
-                                     </div>
-                                   )}
-
-                                   {/* ROW 3: Role Badge */}
+                                   {/* ROW 2: Role Badge */}
                                    {emp.role && (
                                      <div className="px-2.5 py-1 bg-slate-100 border border-slate-200 rounded-md text-[9px] font-black text-slate-500 uppercase tracking-widest leading-none mt-1">
                                        {emp.role}
@@ -218,6 +208,14 @@ export default function EmployeeProfiles() {
                                     </button>
                                   );
                                 })}
+
+                                {/* --- BIRTHDAY BADGE MOVED BACK TO THE RIGHT SIDE --- */}
+                                {bday && (
+                                  <div className="w-12 h-12 flex flex-col items-center justify-center rounded-xl border-2 border-emerald-400 bg-emerald-50 text-emerald-600 shadow-sm ml-2" title="Birthday">
+                                    <span className="font-black text-[9px] uppercase tracking-widest leading-none mt-0.5 opacity-80">{bday.month}</span>
+                                    <span className="font-black text-sm leading-none mt-0.5">{bday.day}</span>
+                                  </div>
+                                )}
                              </div>
 
                           </div>
