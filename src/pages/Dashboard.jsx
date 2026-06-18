@@ -4,7 +4,7 @@ import {
   Users, CheckCircle2, XCircle, Clock, 
   Activity, Video, PieChart, X, User, Printer, Coffee, BarChart3,
   MessageSquare, Send, Bot, ChevronRight, ArrowLeft, ShieldAlert,
-  Megaphone, Gift
+  Megaphone, Gift, Calendar as CalendarIcon, ChevronLeft
 } from 'lucide-react';
 
 const getDBDateStr = (dateObj) => {
@@ -21,8 +21,10 @@ export default function Dashboard({ employees }) {
   const [activeList, setActiveList] = useState(null); 
   const [isLoading, setIsLoading] = useState(true);
 
-  // --- NEW: CULTURE HUB STATE ---
-  const [announcements, setAnnouncements] = useState([]);
+  // --- NEW: CULTURE HUB STATE (CALENDAR) ---
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [events, setEvents] = useState({});
+  const [selectedDateEvents, setSelectedDateEvents] = useState(null);
   const [birthdayCelebrants, setBirthdayCelebrants] = useState([]);
 
   // --- RULE-BASED CHATBOT STATE ---
@@ -73,28 +75,80 @@ export default function Dashboard({ employees }) {
     else setIsLoading(false);
   }, [employees]);
 
-  // --- 3. FETCH CULTURE HUB DATA ---
+  // --- 3. FETCH CALENDAR EVENTS ---
   useEffect(() => {
-    const fetchAnnouncements = async () => {
-      const { data } = await supabase.from('announcements').select('*').order('created_at', { ascending: false }).limit(3);
-      if (data) setAnnouncements(data);
+    const fetchEvents = async () => {
+      const { data, error } = await supabase
+        .from('announcements')
+        .select('*')
+        .not('event_date', 'is', null);
+
+      if (!error && data) {
+        const groupedEvents = {};
+        data.forEach(ev => {
+          if (!groupedEvents[ev.event_date]) groupedEvents[ev.event_date] = [];
+          groupedEvents[ev.event_date].push(ev);
+        });
+        setEvents(groupedEvents);
+      }
     };
-    fetchAnnouncements();
+    fetchEvents();
   }, []);
 
   useEffect(() => {
-    // Process birthdays from the existing employees array (saves database reads)
-    const currentMonth = new Date().getMonth() + 1;
+    const currentMonthNum = currentMonth.getMonth() + 1;
     const upcoming = employees.filter(emp => {
       if (!emp.birthday) return false;
       const [yyyy, mm, dd] = emp.birthday.split('-');
-      return parseInt(mm, 10) === currentMonth;
+      return parseInt(mm, 10) === currentMonthNum;
     }).sort((a, b) => parseInt(a.birthday.split('-')[2], 10) - parseInt(b.birthday.split('-')[2], 10));
     
     setBirthdayCelebrants(upcoming);
-  }, [employees]);
+  }, [employees, currentMonth]);
 
   const total = employees.length;
+
+  // --- CALENDAR LOGIC ---
+  const daysInMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0).getDate();
+  const firstDayOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1).getDay();
+  const nextMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
+  const prevMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
+
+  const renderCalendarDays = () => {
+    const days = [];
+    const todayStr = getDBDateStr(new Date());
+
+    for (let i = 0; i < firstDayOfMonth; i++) {
+      days.push(<div key={`empty-${i}`} className="min-h-[40px]"></div>);
+    }
+
+    for (let i = 1; i <= daysInMonth; i++) {
+      const dateObj = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), i);
+      const dateStr = getDBDateStr(dateObj);
+      const dayEvents = events[dateStr] || [];
+      const isToday = dateStr === todayStr;
+      const hasEvents = dayEvents.length > 0;
+
+      days.push(
+        <div 
+          key={i} 
+          onClick={() => hasEvents && setSelectedDateEvents({ date: dateObj, events: dayEvents })}
+          className={`min-h-[40px] flex flex-col items-center justify-center p-1 rounded-xl transition-all relative
+            ${isToday ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-50 text-slate-700 hover:bg-slate-100'}
+            ${hasEvents ? 'cursor-pointer ring-1 ring-indigo-200 hover:scale-110 z-10' : ''}
+          `}
+        >
+          <span className={`text-xs font-black ${isToday ? 'text-white' : 'text-slate-800'}`}>{i}</span>
+          {hasEvents && (
+            <div className="flex gap-0.5 mt-0.5">
+              <span className={`w-1.5 h-1.5 rounded-full ${isToday ? 'bg-white' : 'bg-rose-500'}`}></span>
+            </div>
+          )}
+        </div>
+      );
+    }
+    return days;
+  };
 
   // --- 4. HIERARCHICAL KNOWLEDGE BASE ---
   const FAQ_CATEGORIES = [
@@ -308,35 +362,41 @@ export default function Dashboard({ employees }) {
               <div className="relative w-full h-40 rounded-[1.5rem] overflow-hidden bg-slate-900 border border-slate-800"><video autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover opacity-80"><source src="/bg-video.mp4" type="video/mp4" /></video></div>
             </div>
 
-            {/* --- NEW: CULTURE HUB (Announcements) --- */}
+            {/* --- NEW: CALENDAR EVENTS BLOCK --- */}
             <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-6 lg:p-8 flex flex-col relative z-20">
-              <h3 className="text-lg font-black tracking-tight text-slate-900 uppercase flex items-center gap-2 mb-4">
-                <Megaphone size={18} className="text-indigo-500" /> Announcements
-              </h3>
-              <div className="space-y-3 flex-1 overflow-y-auto max-h-64 pr-2">
-                {announcements.length === 0 ? (
-                   <p className="text-[10px] font-bold text-slate-400 bg-slate-50 p-4 rounded-2xl text-center border border-dashed border-slate-200">No recent announcements.</p>
-                ) : (
-                  announcements.map((ann) => (
-                    <div key={ann.id} className="p-4 bg-slate-50 border border-slate-100 rounded-2xl hover:bg-white hover:shadow-sm transition-all">
-                      <div className="flex justify-between items-start mb-1">
-                        <h4 className="text-sm font-black text-slate-900 tracking-tight leading-tight pr-2">{ann.subject}</h4>
-                        <span className="text-[8px] font-black text-indigo-500 bg-indigo-50 px-2 py-1 rounded-md uppercase tracking-widest shrink-0">{new Date(ann.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-                      </div>
-                      <p className="text-xs font-semibold text-slate-500 line-clamp-3 leading-relaxed mt-1">{ann.message}</p>
-                    </div>
-                  ))
-                )}
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-lg font-black tracking-tight text-slate-900 uppercase flex items-center gap-2">
+                  <CalendarIcon size={18} className="text-indigo-500" /> Event Calendar
+                </h3>
+                <div className="flex items-center gap-2">
+                   <button onClick={prevMonth} className="p-1.5 bg-slate-50 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-indigo-600 transition-colors"><ChevronLeft size={16}/></button>
+                   <span className="text-xs font-black text-slate-700 uppercase tracking-widest min-w-[100px] text-center">
+                     {currentMonth.toLocaleString('default', { month: 'short', year: 'numeric' })}
+                   </span>
+                   <button onClick={nextMonth} className="p-1.5 bg-slate-50 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-indigo-600 transition-colors"><ChevronRight size={16}/></button>
+                </div>
+              </div>
+
+              {/* Days of Week */}
+              <div className="grid grid-cols-7 gap-1 mb-2 text-center">
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                  <div key={day} className="text-[9px] font-black uppercase tracking-widest text-slate-400">{day}</div>
+                ))}
+              </div>
+
+              {/* Calendar Grid */}
+              <div className="grid grid-cols-7 gap-1 flex-1">
+                {renderCalendarDays()}
               </div>
             </div>
 
-            {/* --- NEW: CULTURE HUB (Birthdays) --- */}
+            {/* --- CULTURE HUB (Birthdays - Untouched) --- */}
             <div className="bg-gradient-to-b from-white to-slate-50 rounded-[2.5rem] border border-slate-100 shadow-sm p-6 lg:p-8 flex flex-col relative z-20">
               <div className="flex justify-between items-end mb-4">
                 <h3 className="text-lg font-black tracking-tight text-slate-900 uppercase flex items-center gap-2">
                   <Gift size={18} className="text-rose-500" /> Birthdays
                 </h3>
-                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{new Date().toLocaleString('default', { month: 'long' })}</p>
+                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{currentMonth.toLocaleString('default', { month: 'long' })}</p>
               </div>
               
               <div className="space-y-3">
@@ -345,7 +405,7 @@ export default function Dashboard({ employees }) {
                 ) : (
                   birthdayCelebrants.map(emp => {
                     const day = parseInt(emp.birthday.split('-')[2], 10);
-                    const isToday = day === new Date().getDate();
+                    const isToday = day === new Date().getDate() && currentMonth.getMonth() === new Date().getMonth();
                     
                     return (
                       <div key={emp.id} className={`flex items-center gap-3 p-3 rounded-2xl border transition-all ${isToday ? 'bg-gradient-to-r from-rose-500 to-pink-500 text-white shadow-lg scale-105 transform -translate-y-1 animate-in fade-in zoom-in duration-500' : 'bg-white border-slate-100 hover:shadow-sm'}`}>
@@ -384,7 +444,8 @@ export default function Dashboard({ employees }) {
         </div>
       </div>
 
-      {/* --- MODAL --- */}
+      {/* --- MODALS --- */}
+      {/* 1. Personnel List Modal */}
       {activeList && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200 print:bg-white print:p-0 print:block">
           <div className="bg-white rounded-[2rem] w-full max-w-md shadow-2xl border border-slate-100 flex flex-col max-h-[80vh] animate-in zoom-in-95 duration-200 print:shadow-none print:border-none print:max-w-none print:h-auto print:max-h-none">
@@ -419,6 +480,33 @@ export default function Dashboard({ employees }) {
                    </div>
                  ))
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Event Calendar Modal */}
+      {selectedDateEvents && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4 animate-in fade-in">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-lg flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95">
+            <div className="p-6 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+              <div>
+                <h3 className="font-black text-xl text-slate-900">Scheduled Events</h3>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">
+                  {selectedDateEvents.date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                </p>
+              </div>
+              <button onClick={() => setSelectedDateEvents(null)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 transition-colors"><X size={20} /></button>
+            </div>
+            
+            <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto bg-slate-100/50">
+              {selectedDateEvents.events.map(ev => (
+                <div key={ev.id} className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden group">
+                  <div className="absolute top-0 left-0 w-1.5 h-full bg-indigo-500"></div>
+                  <h4 className="text-lg font-black text-slate-800 pr-4">{ev.subject}</h4>
+                  <p className="text-sm font-bold text-slate-500 mt-2 leading-relaxed">{ev.message}</p>
+                </div>
+              ))}
             </div>
           </div>
         </div>

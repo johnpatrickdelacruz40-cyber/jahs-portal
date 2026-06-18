@@ -447,7 +447,6 @@ export default function EmployeeProfiles() {
           </div>
         </div>
       )}
-
     </div>
   );
 }
