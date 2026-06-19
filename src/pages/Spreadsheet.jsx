@@ -2,10 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { 
   FileSpreadsheet, Save, Download, Plus, Trash2, 
-  FolderOpen, Loader2, PanelLeftClose, PanelLeftOpen, Upload, Search
+  FolderOpen, Loader2, PanelLeftClose, PanelLeftOpen, Upload, Search, Share2 
 } from 'lucide-react';
 
-const createEmptyGrid = (rows = 40, cols = 26) => Array(rows).fill().map(() => Array(cols).fill(''));
+// CHANGED: Default is now 40 rows and 10 columns (A-J)
+const createEmptyGrid = (rows = 40, cols = 10) => Array(rows).fill().map(() => Array(cols).fill(''));
 const getColumnLetter = (colIndex) => String.fromCharCode(65 + colIndex);
 
 export default function Spreadsheet() {
@@ -20,10 +21,34 @@ export default function Spreadsheet() {
   const searchInputRef = useRef(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const fileInputRef = useRef(null);
+  const [isCopied, setIsCopied] = useState(false);
 
-  // --- NEW: RESIZING STATE ---
+  // Layout State (Widths and Heights)
   const [colWidths, setColWidths] = useState({});
   const [rowHeights, setRowHeights] = useState({});
+
+  // Multiplayer Logic
+  const channelRef = useRef(null);
+
+  useEffect(() => {
+    if (!activeFileId) return;
+    const roomName = `spreadsheet_${activeFileId}`;
+    
+    channelRef.current = supabase.channel(roomName)
+      .on('broadcast', { event: 'cell_update' }, (payload) => {
+        const { rowIndex, colIndex, value } = payload.payload;
+        setGridData(prevGrid => {
+          const newGrid = [...prevGrid];
+          newGrid[rowIndex][colIndex] = value;
+          return newGrid;
+        });
+      })
+      .subscribe();
+
+    return () => {
+      if (channelRef.current) supabase.removeChannel(channelRef.current);
+    };
+  }, [activeFileId]);
 
   useEffect(() => {
     const handleGlobalKeyDown = (e) => {
@@ -49,73 +74,61 @@ export default function Spreadsheet() {
     const newGrid = [...gridData];
     newGrid[rowIndex][colIndex] = value;
     setGridData(newGrid);
+
+    if (activeFileId && channelRef.current) {
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'cell_update',
+        payload: { rowIndex, colIndex, value }
+      });
+    }
   };
 
   const handleKeyDown = (e, rowIndex, colIndex) => {
-    let nextRow = rowIndex;
-    let nextCol = colIndex;
-    let shouldMove = false;
-
+    let nextRow = rowIndex, nextCol = colIndex, shouldMove = false;
     if (e.key === 'ArrowUp') { nextRow -= 1; shouldMove = true; e.preventDefault(); }
-    else if (e.key === 'ArrowDown' || e.key === 'Enter') { 
-      if (e.shiftKey && e.key === 'Enter') nextRow -= 1; else nextRow += 1; 
-      shouldMove = true; e.preventDefault(); 
-    }
+    else if (e.key === 'ArrowDown' || e.key === 'Enter') { if (e.shiftKey && e.key === 'Enter') nextRow -= 1; else nextRow += 1; shouldMove = true; e.preventDefault(); }
     else if (e.key === 'ArrowLeft' && e.target.selectionStart === 0) { nextCol -= 1; shouldMove = true; e.preventDefault(); }
     else if (e.key === 'ArrowRight' && e.target.selectionStart === e.target.value.length) { nextCol += 1; shouldMove = true; e.preventDefault(); }
     else if (e.key === 'Tab') { if (e.shiftKey) nextCol -= 1; else nextCol += 1; shouldMove = true; e.preventDefault(); }
 
     if (shouldMove && nextRow >= 0 && nextRow < gridData.length && nextCol >= 0 && nextCol < gridData[0].length) {
       const nextInput = document.getElementById(`cell-${nextRow}-${nextCol}`);
-      if (nextInput) {
-        nextInput.focus();
-        setTimeout(() => nextInput.select(), 0);
-      }
+      if (nextInput) { nextInput.focus(); setTimeout(() => nextInput.select(), 0); }
     }
   };
 
-  // --- NEW: DRAG TO RESIZE LOGIC ---
   const handleColResize = (e, colIndex) => {
     e.preventDefault();
     const startX = e.pageX;
     const startWidth = colWidths[colIndex] || 160;
-
-    const handleMouseMove = (moveEvent) => {
-      const newWidth = Math.max(50, startWidth + (moveEvent.pageX - startX)); // Minimum 50px
-      setColWidths(prev => ({ ...prev, [colIndex]: newWidth }));
-    };
-
-    const handleMouseUp = () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    const handleMouseMove = (moveEvent) => setColWidths(prev => ({ ...prev, [colIndex]: Math.max(50, startWidth + (moveEvent.pageX - startX)) }));
+    const handleMouseUp = () => { window.removeEventListener('mousemove', handleMouseMove); window.removeEventListener('mouseup', handleMouseUp); };
+    window.addEventListener('mousemove', handleMouseMove); window.addEventListener('mouseup', handleMouseUp);
   };
 
   const handleRowResize = (e, rowIndex) => {
     e.preventDefault();
     const startY = e.pageY;
     const startHeight = rowHeights[rowIndex] || 40;
-
-    const handleMouseMove = (moveEvent) => {
-      const newHeight = Math.max(30, startHeight + (moveEvent.pageY - startY)); // Minimum 30px
-      setRowHeights(prev => ({ ...prev, [rowIndex]: newHeight }));
-    };
-
-    const handleMouseUp = () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    const handleMouseMove = (moveEvent) => setRowHeights(prev => ({ ...prev, [rowIndex]: Math.max(30, startHeight + (moveEvent.pageY - startY)) }));
+    const handleMouseUp = () => { window.removeEventListener('mousemove', handleMouseMove); window.removeEventListener('mouseup', handleMouseUp); };
+    window.addEventListener('mousemove', handleMouseMove); window.addEventListener('mouseup', handleMouseUp);
   };
 
+  // --- UPDATED: Save Grid AND Layout to Cloud ---
   const handleSave = async () => {
     setIsSaving(true);
-    const payload = { name: fileName, data: gridData };
+    // Bundle the grid data and sizes into one JSON object
+    const payload = { 
+      name: fileName, 
+      data: {
+        grid: gridData,
+        colWidths: colWidths,
+        rowHeights: rowHeights
+      } 
+    };
+
     if (activeFileId) await supabase.from('spreadsheets').update(payload).eq('id', activeFileId);
     else {
       const { data } = await supabase.from('spreadsheets').insert([payload]).select().single();
@@ -125,12 +138,24 @@ export default function Spreadsheet() {
     setIsSaving(false);
   };
 
+  // --- UPDATED: Open File & Restore Layout ---
   const handleOpenFile = async (id) => {
     const { data, error } = await supabase.from('spreadsheets').select('*').eq('id', id).single();
     if (!error && data) {
       setActiveFileId(data.id);
       setFileName(data.name);
-      setGridData(data.data);
+      
+      // Backward compatibility check for older files that didn't have layouts saved
+      if (Array.isArray(data.data)) {
+        setGridData(data.data);
+        setColWidths({});
+        setRowHeights({});
+      } else {
+        // Load the new bundle
+        setGridData(data.data.grid || createEmptyGrid());
+        setColWidths(data.data.colWidths || {});
+        setRowHeights(data.data.rowHeights || {});
+      }
     }
   };
 
@@ -139,6 +164,8 @@ export default function Spreadsheet() {
     setFileName('New Spreadsheet');
     setGridData(createEmptyGrid());
     setSearchQuery('');
+    setColWidths({});
+    setRowHeights({});
   };
 
   const handleDelete = async (id, e) => {
@@ -193,9 +220,19 @@ export default function Spreadsheet() {
       }
       setGridData(finalGrid);
       setFileName(file.name.replace('.csv', '')); 
+      setColWidths({}); // Reset layout on new import
+      setRowHeights({});
     };
     reader.readAsText(file);
     e.target.value = null; 
+  };
+
+  const handleShare = () => {
+    if (!activeFileId) return alert("Please save the file first before sharing!");
+    const text = `Join me in the JAHS System Portal! Open the spreadsheet named: "${fileName}" to edit together.`;
+    navigator.clipboard.writeText(text);
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 2000);
   };
 
   return (
@@ -236,9 +273,13 @@ export default function Spreadsheet() {
             </div>
           </div>
           <div className="flex gap-2 shrink-0">
+            <button onClick={handleShare} className={`flex items-center gap-2 px-4 py-2.5 border rounded-xl font-black text-[10px] uppercase tracking-widest transition-all shadow-sm ${isCopied ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-white border-slate-200 text-indigo-600 hover:bg-indigo-50'}`}>
+              <Share2 size={14} /> {isCopied ? 'Copied!' : 'Share'}
+            </button>
+
             <input type="file" accept=".csv" ref={fileInputRef} onChange={handleImportCSV} className="hidden" />
-            <button onClick={() => fileInputRef.current.click()} className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-sm"><Upload size={14} /> Import CSV</button>
-            <button onClick={handleDownloadCSV} className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-sm"><Download size={14} /> Export CSV</button>
+            <button onClick={() => fileInputRef.current.click()} className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-sm"><Upload size={14} /> Import</button>
+            <button onClick={handleDownloadCSV} className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-sm"><Download size={14} /> Export</button>
             <button onClick={handleSave} disabled={isSaving} className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-md"><Save size={14} /> Cloud Save</button>
           </div>
         </div>
@@ -256,7 +297,6 @@ export default function Spreadsheet() {
                       style={{ width: colWidths[colIndex] || 160 }}
                     >
                       {getColumnLetter(colIndex)}
-                      {/* DRAG HANDLE FOR COLUMN */}
                       <div 
                         onMouseDown={(e) => handleColResize(e, colIndex)}
                         className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-indigo-500/50 z-40"
@@ -270,7 +310,6 @@ export default function Spreadsheet() {
                   <tr key={`row-${rowIndex}`} style={{ height: rowHeights[rowIndex] || 40 }}>
                     <td className="w-12 bg-slate-200/80 border border-slate-300 text-center align-middle text-[11px] font-black text-slate-600 sticky left-0 z-20 shadow-sm select-none backdrop-blur-sm relative group">
                       {rowIndex + 1}
-                      {/* DRAG HANDLE FOR ROW */}
                       <div 
                         onMouseDown={(e) => handleRowResize(e, rowIndex)}
                         className="absolute bottom-0 left-0 right-0 h-2 cursor-row-resize hover:bg-indigo-500/50 z-40"
