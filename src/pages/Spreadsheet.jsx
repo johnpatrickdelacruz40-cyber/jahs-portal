@@ -5,7 +5,7 @@ import {
   FolderOpen, Loader2, PanelLeftClose, PanelLeftOpen, Upload, Search, Share2 
 } from 'lucide-react';
 
-// CHANGED: Default is now 40 rows and 10 columns (A-J)
+// Default is 40 rows and 10 columns (A-J)
 const createEmptyGrid = (rows = 40, cols = 10) => Array(rows).fill().map(() => Array(cols).fill(''));
 const getColumnLetter = (colIndex) => String.fromCharCode(65 + colIndex);
 
@@ -116,10 +116,8 @@ export default function Spreadsheet() {
     window.addEventListener('mousemove', handleMouseMove); window.addEventListener('mouseup', handleMouseUp);
   };
 
-  // --- UPDATED: Save Grid AND Layout to Cloud ---
   const handleSave = async () => {
     setIsSaving(true);
-    // Bundle the grid data and sizes into one JSON object
     const payload = { 
       name: fileName, 
       data: {
@@ -138,20 +136,17 @@ export default function Spreadsheet() {
     setIsSaving(false);
   };
 
-  // --- UPDATED: Open File & Restore Layout ---
   const handleOpenFile = async (id) => {
     const { data, error } = await supabase.from('spreadsheets').select('*').eq('id', id).single();
     if (!error && data) {
       setActiveFileId(data.id);
       setFileName(data.name);
       
-      // Backward compatibility check for older files that didn't have layouts saved
       if (Array.isArray(data.data)) {
         setGridData(data.data);
         setColWidths({});
         setRowHeights({});
       } else {
-        // Load the new bundle
         setGridData(data.data.grid || createEmptyGrid());
         setColWidths(data.data.colWidths || {});
         setRowHeights(data.data.rowHeights || {});
@@ -220,7 +215,7 @@ export default function Spreadsheet() {
       }
       setGridData(finalGrid);
       setFileName(file.name.replace('.csv', '')); 
-      setColWidths({}); // Reset layout on new import
+      setColWidths({}); 
       setRowHeights({});
     };
     reader.readAsText(file);
@@ -236,7 +231,8 @@ export default function Spreadsheet() {
   };
 
   return (
-    <div className="flex h-[85vh] overflow-hidden animate-in fade-in duration-700 relative">
+    // INCREASED HEIGHT: Now stretches to 92vh to fill the screen
+    <div className="flex h-[92vh] w-full overflow-hidden animate-in fade-in duration-700 relative">
       
       <div className={`bg-white rounded-l-[2.5rem] border-y border-l border-slate-200 shadow-sm flex flex-col h-full overflow-hidden transition-all duration-300 ease-in-out z-10 shrink-0 ${isSidebarOpen ? 'w-72 p-6' : 'w-0 p-0 opacity-0 border-none'}`}>
         <div className="min-w-[14rem]">
@@ -244,7 +240,7 @@ export default function Spreadsheet() {
             <Plus size={16} /> New Sheet
           </button>
           <h3 className="text-xs font-black tracking-widest text-slate-400 uppercase flex items-center gap-2 mb-4"><FolderOpen size={14} /> Saved Files</h3>
-          <div className="flex-1 overflow-y-auto space-y-2 pr-2 max-h-[60vh]">
+          <div className="flex-1 overflow-y-auto space-y-2 pr-2 max-h-[65vh]">
             {isLoading ? <p className="text-xs font-bold text-slate-400 text-center py-4">Loading...</p> : savedFiles.map(file => (
               <div key={file.id} onClick={() => handleOpenFile(file.id)} className={`p-3 rounded-xl border cursor-pointer transition-all group flex justify-between items-center ${activeFileId === file.id ? 'bg-indigo-50 border-indigo-200 shadow-sm' : 'bg-slate-50 border-transparent hover:bg-slate-100'}`}>
                 <div className="overflow-hidden">
@@ -258,7 +254,7 @@ export default function Spreadsheet() {
         </div>
       </div>
 
-      <div className={`flex-1 bg-white border border-slate-200 shadow-sm flex flex-col transition-all duration-300 ${isSidebarOpen ? 'rounded-r-[2.5rem]' : 'rounded-[2.5rem]'}`}>
+      <div className={`flex-1 bg-white border border-slate-200 shadow-sm flex flex-col transition-all duration-300 overflow-hidden ${isSidebarOpen ? 'rounded-r-[2.5rem]' : 'rounded-[2.5rem]'}`}>
         
         <div className="p-4 border-b border-slate-200 bg-slate-50/80 flex justify-between items-center shrink-0 flex-wrap gap-4">
           <div className="flex items-center gap-4 flex-1">
@@ -272,21 +268,22 @@ export default function Spreadsheet() {
               <input ref={searchInputRef} type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Find... (Ctrl+F)" className="pl-9 pr-4 py-2 text-sm font-bold text-slate-700 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/50 w-48" />
             </div>
           </div>
-          <div className="flex gap-2 shrink-0">
-            <button onClick={handleShare} className={`flex items-center gap-2 px-4 py-2.5 border rounded-xl font-black text-[10px] uppercase tracking-widest transition-all shadow-sm ${isCopied ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-white border-slate-200 text-indigo-600 hover:bg-indigo-50'}`}>
+          <div className="flex gap-2 shrink-0 overflow-x-auto">
+            <button onClick={handleShare} className={`flex items-center gap-2 px-4 py-2.5 border rounded-xl font-black text-[10px] uppercase tracking-widest transition-all shadow-sm whitespace-nowrap ${isCopied ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-white border-slate-200 text-indigo-600 hover:bg-indigo-50'}`}>
               <Share2 size={14} /> {isCopied ? 'Copied!' : 'Share'}
             </button>
 
             <input type="file" accept=".csv" ref={fileInputRef} onChange={handleImportCSV} className="hidden" />
-            <button onClick={() => fileInputRef.current.click()} className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-sm"><Upload size={14} /> Import</button>
-            <button onClick={handleDownloadCSV} className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-sm"><Download size={14} /> Export</button>
-            <button onClick={handleSave} disabled={isSaving} className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-md"><Save size={14} /> Cloud Save</button>
+            <button onClick={() => fileInputRef.current.click()} className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-sm whitespace-nowrap"><Upload size={14} /> Import</button>
+            <button onClick={handleDownloadCSV} className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-sm whitespace-nowrap"><Download size={14} /> Export</button>
+            <button onClick={handleSave} disabled={isSaving} className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-md whitespace-nowrap"><Save size={14} /> Cloud Save</button>
           </div>
         </div>
 
-        <div className="flex-1 overflow-auto bg-[#f8f9fa] p-0 md:p-4 relative">
-          <div className="bg-white inline-block border-2 border-slate-300 shadow-xl relative rounded-sm m-2">
-            <table className="border-collapse bg-white table-fixed">
+        {/* EXPANDED CONTAINER: Removed inner margins/padding so the grid touches the edges */}
+        <div className="flex-1 overflow-auto bg-[#f8f9fa] relative">
+          <div className="bg-white inline-block border-slate-300 relative min-w-full">
+            <table className="border-collapse bg-white table-fixed min-w-full">
               <thead>
                 <tr>
                   <th className="w-12 h-10 bg-slate-200/80 border border-slate-300 sticky top-0 left-0 z-30 shadow-sm backdrop-blur-sm"></th>
