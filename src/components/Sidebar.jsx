@@ -2,18 +2,20 @@ import React from 'react';
 import { 
   LayoutDashboard, Users, UserSquare, CalendarCheck, 
   ShieldAlert, FileClock, LogOut, X, 
-  RadioTower, Signal, Globe, ShoppingCart, MapPin, Megaphone // Added Megaphone
+  RadioTower, Signal, Globe, ShoppingCart, MapPin, Megaphone,
+  FileSpreadsheet // <-- NEW: Added Spreadsheet Icon
 } from 'lucide-react';
 
 export default function Sidebar({ isOpen, setIsOpen, activeTab, setActiveTab, isAdmin, setIsAdmin }) {
   
-  // --- NEW: Added 'Announcements' to the menu array ---
+  // --- UPDATED: Added 'Spreadsheet' to the menu array ---
   const menuItems = [
     { name: 'Dashboard', icon: LayoutDashboard },
     { name: 'Employee Profiles', icon: UserSquare },
     { name: 'Manage Employees', icon: Users, adminOnly: true },
     { name: 'Daily Attendance', icon: CalendarCheck, adminOnly: true },
-    { name: 'Announcements', icon: Megaphone, adminOnly: true }, // Placed in Admin section
+    { name: 'Announcements', icon: Megaphone, adminOnly: true },
+    { name: 'Spreadsheet', icon: FileSpreadsheet, adminOnly: true }, // <-- NEW: Spreadsheet button
     { name: 'Audit History', icon: FileClock, adminOnly: true },
   ];
 
@@ -80,7 +82,6 @@ export default function Sidebar({ isOpen, setIsOpen, activeTab, setActiveTab, is
           })}
         </div>
 
-        {/* Admin Login / Logout Footer */}
         {/* --- QUICK LINKS COMMAND CENTER --- */}
         <div className="mb-6 px-4 relative">
           
