@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { 
   FileSpreadsheet, Save, Download, Plus, Trash2, 
-  FolderOpen, Loader2, PanelLeftClose, PanelLeftOpen, Upload, Search, Share2 
+  FolderOpen, Loader2, PanelLeftClose, PanelLeftOpen, Upload, Search, Share2, Clock 
 } from 'lucide-react';
 
 // Default is 40 rows and 10 columns (A-J)
@@ -124,7 +124,8 @@ export default function Spreadsheet() {
         grid: gridData,
         colWidths: colWidths,
         rowHeights: rowHeights
-      } 
+      },
+      created_at: new Date().toISOString() // OVERRIDE TIMESTAMP TO CURRENT TIME
     };
 
     if (activeFileId) await supabase.from('spreadsheets').update(payload).eq('id', activeFileId);
@@ -231,7 +232,6 @@ export default function Spreadsheet() {
   };
 
   return (
-    // INCREASED HEIGHT: Now stretches to 92vh to fill the screen
     <div className="flex h-[92vh] w-full overflow-hidden animate-in fade-in duration-700 relative">
       
       <div className={`bg-white rounded-l-[2.5rem] border-y border-l border-slate-200 shadow-sm flex flex-col h-full overflow-hidden transition-all duration-300 ease-in-out z-10 shrink-0 ${isSidebarOpen ? 'w-72 p-6' : 'w-0 p-0 opacity-0 border-none'}`}>
@@ -245,7 +245,12 @@ export default function Spreadsheet() {
               <div key={file.id} onClick={() => handleOpenFile(file.id)} className={`p-3 rounded-xl border cursor-pointer transition-all group flex justify-between items-center ${activeFileId === file.id ? 'bg-indigo-50 border-indigo-200 shadow-sm' : 'bg-slate-50 border-transparent hover:bg-slate-100'}`}>
                 <div className="overflow-hidden">
                   <p className={`font-bold text-sm truncate ${activeFileId === file.id ? 'text-indigo-700' : 'text-slate-700'}`}>{file.name}</p>
-                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-0.5">{new Date(file.created_at).toLocaleDateString()}</p>
+                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-1">{new Date(file.created_at).toLocaleDateString()}</p>
+                  
+                  {/* NEW: TIME OF LAST SAVE */}
+                  <p className="text-[8px] font-bold text-slate-400 mt-0.5 flex items-center gap-1">
+                    <Clock size={10} /> {new Date(file.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </p>
                 </div>
                 <button onClick={(e) => handleDelete(file.id, e)} className="p-2 text-slate-300 hover:text-rose-500 hover:bg-white rounded-lg transition-colors opacity-0 group-hover:opacity-100 shrink-0"><Trash2 size={14} /></button>
               </div>
@@ -280,7 +285,6 @@ export default function Spreadsheet() {
           </div>
         </div>
 
-        {/* EXPANDED CONTAINER: Removed inner margins/padding so the grid touches the edges */}
         <div className="flex-1 overflow-auto bg-[#f8f9fa] relative">
           <div className="bg-white inline-block border-slate-300 relative min-w-full">
             <table className="border-collapse bg-white table-fixed min-w-full">
